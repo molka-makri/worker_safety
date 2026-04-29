@@ -1,0 +1,48 @@
+{% extends 'safety_vision/base.html' %}
+
+{% block title %}Rapports — SafeVision{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="eyebrow">Rapports</p>
+    <h1>Rapports SafeVision</h1>
+    <p>Consultez les synthèses et les tendances de surveillance.</p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-secondary">Exporter PDF</button>
+    <button class="btn btn-primary">Nouveau rapport</button>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Résumé des performances</h2>
+  </div>
+  <div class="panel-body report-grid">
+    <article class="report-card">
+      <h3>Alertes critiques</h3>
+      <p>24 dernièrement</p>
+    </article>
+    <article class="report-card">
+      <h3>Détections de chute</h3>
+      <p>12 confirmed</p>
+    </article>
+    <article class="report-card">
+      <h3>Modules actifs</h3>
+      <p>{{ modules.count if modules else 'N/A' }}</p>
+    </article>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Dernières alertes</h2>
+  </div>
+  <div class="panel-body">
+    <div class="empty-state">
+      <p>Aucun rapport détaillé disponible dans cette version de démonstration.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

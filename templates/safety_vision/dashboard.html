@@ -1,0 +1,344 @@
+{% extends "safety_vision/base.html" %}
+
+{% block title %}Dashboard — SafeVision AI{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Vue d'ensemble en temps réel — {{ today|date:"d/m/Y" }}{% endblock %}
+
+{% block content %}
+
+<!-- KPI ROW -->
+<div class="stats-row">
+  <div class="stat-card" style="--card-accent: var(--accent-red)">
+    <div class="stat-label">Alertes Critiques</div>
+    <div class="stat-value text-red" id="kpi-critical">—</div>
+    <div class="stat-sub">dernières 24h</div>
+    <svg class="stat-icon" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="12 2 22 20 2 20"/></svg>
+  </div>
+  <div class="stat-card" style="--card-accent: var(--accent-yellow)">
+    <div class="stat-label">Avertissements</div>
+    <div class="stat-value text-yellow" id="kpi-warnings">—</div>
+    <div class="stat-sub">dernières 24h</div>
+    <svg class="stat-icon" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1"/></svg>
+  </div>
+  <div class="stat-card" style="--card-accent: var(--accent-green)">
+    <div class="stat-label">Travailleurs Détectés</div>
+    <div class="stat-value text-green" id="kpi-workers">—</div>
+    <div class="stat-sub">actuellement en zone</div>
+    <svg class="stat-icon" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+  </div>
+  <div class="stat-card" style="--card-accent: var(--accent-blue)">
+    <div class="stat-label">Modules Actifs</div>
+    <div class="stat-value text-blue" id="kpi-modules">7</div>
+    <div class="stat-sub">sur 7 disponibles</div>
+    <svg class="stat-icon" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="2" y="2" width="8" height="8"/><rect x="14" y="2" width="8" height="8"/><rect x="14" y="14" width="8" height="8"/><rect x="2" y="14" width="8" height="8"/></svg>
+  </div>
+</div>
+
+<!-- VIDEO + ALERTS -->
+<div class="video-grid">
+
+  <!-- VIDEO MAIN -->
+  <div class="video-main">
+    <div class="video-feed" id="main-video-container">
+      <div class="video-placeholder" id="video-placeholder">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        <p>Sélectionner une source vidéo</p>
+        <p style="font-size:10px; opacity:.5">Caméra en direct ou fichier vidéo</p>
+      </div>
+
+      <div class="video-overlay-info" id="video-info" style="display:none">
+        <div class="rec-indicator"><span class="rec-dot"></span> REC</div>
+        <span id="overlay-cam">CAM 1</span>
+        <span id="overlay-fps">— FPS</span>
+        <span id="overlay-res">—</span>
+      </div>
+    </div>
+
+    <div class="video-controls">
+      <button class="btn-control primary" id="btn-start-analysis" onclick="startAnalysis()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Lancer l'analyse
+      </button>
+      <button class="btn-control" onclick="stopAnalysis()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        Pause
+      </button>
+      <button class="btn-control">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+        Historique
+      </button>
+
+      <div class="module-toggles">
+        <span class="toggle-chip on" style="--chip-color: #4AE3B5; --chip-rgb: 74,227,181" data-module="ppe" onclick="toggleModule(this)">EPI</span>
+        <span class="toggle-chip on" style="--chip-color: #7B61FF; --chip-rgb: 123,97,255" data-module="posture" onclick="toggleModule(this)">POSTURE</span>
+        <span class="toggle-chip on" style="--chip-color: #FFB800; --chip-rgb: 255,184,0" data-module="fatigue" onclick="toggleModule(this)">FATIGUE</span>
+        <span class="toggle-chip on" style="--chip-color: #00C2FF; --chip-rgb: 0,194,255" data-module="tracking" onclick="toggleModule(this)">TRACKING</span>
+        <span class="toggle-chip on" style="--chip-color: #FF6B00; --chip-rgb: 255,107,0" data-module="hazards" onclick="toggleModule(this)">RISQUES</span>
+        <span class="toggle-chip on" style="--chip-color: #FF3B2F; --chip-rgb: 255,59,47" data-module="fire" onclick="toggleModule(this)">FEU</span>
+        <span class="toggle-chip on" style="--chip-color: #E040FB; --chip-rgb: 224,64,251" data-module="machinery" onclick="toggleModule(this)">MACHINES</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERTS PANEL -->
+  <div class="alerts-panel">
+    <div class="panel-header">
+      <span class="panel-title">Alertes Récentes</span>
+      <a href="/alerts/" style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono); text-decoration:none;">Voir tout →</a>
+    </div>
+    <div class="alerts-list" id="alerts-feed">
+      <div class="empty-state" style="padding:40px 20px">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".3"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <p>Aucune alerte pour l'instant</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODULES OVERVIEW -->
+<h2 style="font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:14px;">
+  Modules IA — Vue d'ensemble
+</h2>
+
+<div class="modules-grid">
+
+  <a class="module-card" href="/module/ppe/" style="--card-accent:#4AE3B5; --card-rgb:74,227,181">
+    <div class="module-card-header">
+      <div class="module-icon-wrap" style="--icon-rgb:74,227,181">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4AE3B5" stroke-width="1.5"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      </div>
+      <div>
+        <div class="module-card-name">EPI & Signalisation</div>
+        <div class="module-card-axes">Axe 1 + 13 — YOLOv8/11</div>
+      </div>
+      <span class="module-status-chip chip-pending">EN DEV</span>
+    </div>
+    <div class="module-card-body">
+      <div class="module-metrics">
+        <div class="metric-item">
+          <div class="metric-label">mAP@0.5</div>
+          <div class="metric-value text-green" id="m1-map">—</div>
+          <div class="metric-sub">détection EPI</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">FPS</div>
+          <div class="metric-value" id="m1-fps">—</div>
+          <div class="metric-sub">traitement</div>
+        </div>
+      </div>
+      <div class="model-zone" style="padding:10px; font-size:9px">
+        ZONE — Overlay détection casque/gilet + score visibilité
+      </div>
+    </div>
+    <div class="module-card-actions">
+      <span class="btn-sm btn-ghost">Configurer</span>
+      <span class="btn-sm btn-accent">Ouvrir</span>
+    </div>
+  </a>
+
+  <a class="module-card" href="/module/posture/" style="--card-accent:#7B61FF; --card-rgb:123,97,255">
+    <div class="module-card-header">
+      <div class="module-icon-wrap" style="--icon-rgb:123,97,255">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7B61FF" stroke-width="1.5"><circle cx="12" cy="5" r="2"/><path d="M8 11h8l-1 7H9l-1-7z"/><path d="M9 18l-2 3M15 18l2 3"/><path d="M9 11L7 8M15 11l2-3"/></svg>
+      </div>
+      <div>
+        <div class="module-card-name">Posture & Comportement</div>
+        <div class="module-card-axes">Axe 2 + 12 — MediaPipe</div>
+      </div>
+      <span class="module-status-chip chip-pending">EN DEV</span>
+    </div>
+    <div class="module-card-body">
+      <div class="module-metrics">
+        <div class="metric-item">
+          <div class="metric-label">Précision</div>
+          <div class="metric-value text-purple" id="m2-acc">—</div>
+          <div class="metric-sub">classification</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">F1</div>
+          <div class="metric-value" id="m2-f1">—</div>
+          <div class="metric-sub">posture</div>
+        </div>
+      </div>
+      <div class="model-zone" style="padding:10px; font-size:9px">
+        ZONE — Overlay squelette + label posture sûre/dangereuse
+      </div>
+    </div>
+    <div class="module-card-actions">
+      <span class="btn-sm btn-ghost">Configurer</span>
+      <span class="btn-sm btn-accent">Ouvrir</span>
+    </div>
+  </a>
+
+  <a class="module-card" href="/module/fatigue/" style="--card-accent:#FFB800; --card-rgb:255,184,0">
+    <div class="module-card-header">
+      <div class="module-icon-wrap" style="--icon-rgb:255,184,0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB800" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+      </div>
+      <div>
+        <div class="module-card-name">Fatigue & Incapacité</div>
+        <div class="module-card-axes">Axe 3 + 4 — YOLO + EAR</div>
+      </div>
+      <span class="module-status-chip chip-pending">EN DEV</span>
+    </div>
+    <div class="module-card-body">
+      <div class="module-metrics">
+        <div class="metric-item">
+          <div class="metric-label">Fatigue F1</div>
+          <div class="metric-value text-yellow" id="m3-f1">—</div>
+          <div class="metric-sub">somnolence</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Latence</div>
+          <div class="metric-value" id="m3-lat">—</div>
+          <div class="metric-sub">ms alerte</div>
+        </div>
+      </div>
+      <div class="model-zone" style="padding:10px; font-size:9px">
+        ZONE — Alertes multi-niveaux: Avertissement → Critique → Urgence
+      </div>
+    </div>
+    <div class="module-card-actions">
+      <span class="btn-sm btn-ghost">Configurer</span>
+      <span class="btn-sm btn-accent">Ouvrir</span>
+    </div>
+  </a>
+
+  <a class="module-card" href="/module/tracking/" style="--card-accent:#00C2FF; --card-rgb:0,194,255">
+    <div class="module-card-header">
+      <div class="module-icon-wrap" style="--icon-rgb:0,194,255">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00C2FF" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 2"/></svg>
+      </div>
+      <div>
+        <div class="module-card-name">Tracking & Objets Tombants</div>
+        <div class="module-card-axes">Axe 11 + 6 — DeepSORT</div>
+      </div>
+      <span class="module-status-chip chip-pending">EN DEV</span>
+    </div>
+    <div class="module-card-body">
+      <div class="module-metrics">
+        <div class="metric-item">
+          <div class="metric-label">IDF1</div>
+          <div class="metric-value text-blue" id="m4-idf1">—</div>
+          <div class="metric-sub">tracking</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Comptage</div>
+          <div class="metric-value" id="m4-count">—</div>
+          <div class="metric-sub">erreur %</div>
+        </div>
+      </div>
+      <div class="model-zone" style="padding:10px; font-size:9px">
+        ZONE — Comptage entrée/sortie par zone + trajectoire objets
+      </div>
+    </div>
+    <div class="module-card-actions">
+      <span class="btn-sm btn-ghost">Configurer</span>
+      <span class="btn-sm btn-accent">Ouvrir</span>
+    </div>
+  </a>
+
+  <a class="module-card" href="/module/hazards/" style="--card-accent:#FF6B00; --card-rgb:255,107,0">
+    <div class="module-card-header">
+      <div class="module-icon-wrap" style="--icon-rgb:255,107,0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div>
+        <div class="module-card-name">Risques Environnement</div>
+        <div class="module-card-axes">Axe 5 — YOLOv8-seg / U-Net</div>
+      </div>
+      <span class="module-status-chip chip-pending">EN DEV</span>
+    </div>
+    <div class="module-card-body">
+      <div class="module-metrics">
+        <div class="metric-item">
+          <div class="metric-label">IoU</div>
+          <div class="metric-value text-orange" id="m5-iou">—</div>
+          <div class="metric-sub">segmentation</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Dice</div>
+          <div class="metric-value" id="m5-dice">—</div>
+          <div class="metric-sub">score</div>
+        </div>
+      </div>
+      <div class="model-zone" style="padding:10px; font-size:9px">
+        ZONE — Masques segmentation + heatmap risques + sorties bloquées
+      </div>
+    </div>
+    <div class="module-card-actions">
+      <span class="btn-sm btn-ghost">Configurer</span>
+      <span class="btn-sm btn-accent">Ouvrir</span>
+    </div>
+  </a>
+
+  <a class="module-card" href="/module/fire/" style="--card-accent:#FF3B2F; --card-rgb:255,59,47">
+    <div class="module-card-header">
+      <div class="module-icon-wrap" style="--icon-rgb:255,59,47">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF3B2F" stroke-width="1.5"><path d="M12 2c0 0-4 4-4 8 0 2.2 1.8 4 4 4s4-1.8 4-4c0-1-.5-2-1-3 0 0-1 1.5-2 1.5S11 7 12 2z"/><path d="M12 14c-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4-1.8-4-4-4z"/></svg>
+      </div>
+      <div>
+        <div class="module-card-name">Feu & Fumée</div>
+        <div class="module-card-axes">Axe 7 + 8 — YOLO + opticalflow</div>
+      </div>
+      <span class="module-status-chip chip-pending">EN DEV</span>
+    </div>
+    <div class="module-card-body">
+      <div class="module-metrics">
+        <div class="metric-item">
+          <div class="metric-label">mAP</div>
+          <div class="metric-value text-red" id="m6-map">—</div>
+          <div class="metric-sub">feu/fumée</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Faux pos.</div>
+          <div class="metric-value" id="m6-fp">—</div>
+          <div class="metric-sub">taux /h</div>
+        </div>
+      </div>
+      <div class="model-zone" style="padding:10px; font-size:9px">
+        ZONE — Alerte feu/fumée + indicateur explosion + alerte fusionnée
+      </div>
+    </div>
+    <div class="module-card-actions">
+      <span class="btn-sm btn-ghost">Configurer</span>
+      <span class="btn-sm btn-accent">Ouvrir</span>
+    </div>
+  </a>
+
+  <a class="module-card" href="/module/machinery/" style="--card-accent:#E040FB; --card-rgb:224,64,251">
+    <div class="module-card-header">
+      <div class="module-icon-wrap" style="--icon-rgb:224,64,251">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E040FB" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <div>
+        <div class="module-card-name">Machines & Proximité</div>
+        <div class="module-card-axes">Axe 9 + 10 — YOLO + MiDaS</div>
+      </div>
+      <span class="module-status-chip chip-pending">EN DEV</span>
+    </div>
+    <div class="module-card-body">
+      <div class="module-metrics">
+        <div class="metric-item">
+          <div class="metric-label">Précision</div>
+          <div class="metric-value text-pink" id="m7-prec">—</div>
+          <div class="metric-sub">anomalie</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">FPS</div>
+          <div class="metric-value" id="m7-fps">—</div>
+          <div class="metric-sub">traitement</div>
+        </div>
+      </div>
+      <div class="model-zone" style="padding:10px; font-size:9px">
+        ZONE — Alerte anomalie machine + overlay proximité travailleur
+      </div>
+    </div>
+    <div class="module-card-actions">
+      <span class="btn-sm btn-ghost">Configurer</span>
+      <span class="btn-sm btn-accent">Ouvrir</span>
+    </div>
+  </a>
+
+</div>
+{% endblock %}

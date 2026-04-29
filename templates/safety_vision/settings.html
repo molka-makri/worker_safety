@@ -1,0 +1,137 @@
+{% extends "safety_vision/base.html" %}
+{% block title %}Paramètres — SafeVision AI{% endblock %}
+{% block page_title %}Paramètres{% endblock %}
+{% block page_subtitle %}Configuration de l'application et des modèles{% endblock %}
+{% block content %}
+
+<div class="settings-layout">
+  <div class="settings-menu">
+    <a class="settings-tab active" href="#cameras">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      Caméras
+    </a>
+    <a class="settings-tab" href="#models">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="8"/><rect x="14" y="2" width="8" height="8"/><rect x="14" y="14" width="8" height="8"/><rect x="2" y="14" width="8" height="8"/></svg>
+      Modèles IA
+    </a>
+    <a class="settings-tab" href="#alerts-config">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+      Alertes
+    </a>
+    <a class="settings-tab" href="#general">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33"/></svg>
+      Général
+    </a>
+  </div>
+
+  <div class="settings-panel">
+
+    <div id="cameras">
+      <h2 class="settings-section-title">Configuration des Caméras</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Source Caméra 1</label>
+          <input type="text" class="form-input" placeholder="rtsp://192.168.1.100/stream1" value="">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Source Caméra 2</label>
+          <input type="text" class="form-input" placeholder="rtsp://192.168.1.101/stream1" value="">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Source Caméra 3</label>
+          <input type="text" class="form-input" placeholder="rtsp://..." value="">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Résolution de traitement</label>
+          <select class="form-input">
+            <option>640×480</option>
+            <option selected>1280×720</option>
+            <option>1920×1080</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <hr style="border-color:var(--bg-border); margin:24px 0">
+
+    <div id="models">
+      <h2 class="settings-section-title">Configuration des Modèles IA</h2>
+
+      {% for mod in modules %}
+      <div style="background:var(--bg-elevated); border-radius:8px; padding:14px; margin-bottom:12px; border:1px solid var(--bg-border)">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px">
+          <div class="module-dot" style="background:{{ mod.color }}; width:10px; height:10px"></div>
+          <span style="font-weight:700; font-size:13px">{{ mod.name }}</span>
+          <span style="font-size:10px; color:var(--text-muted); font-family:var(--font-mono); margin-left:auto">{{ mod.icon }}</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Fichier poids (.pt / .onnx)</label>
+            <div style="display:flex; gap:8px">
+              <input type="text" class="form-input" placeholder="models/{{ mod.id }}/weights_best.pt">
+              <button class="btn-control" style="white-space:nowrap; padding:6px 10px; font-size:11px">Parcourir</button>
+            </div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Seuil de confiance</label>
+            <input type="number" class="form-input" min="0" max="1" step="0.05" value="0.5" placeholder="0.5">
+          </div>
+        </div>
+        <div class="model-zone" style="padding:10px; margin-top:10px; font-size:9px; border-radius:6px">
+          ZONE — Paramètres avancés spécifiques au modèle {{ mod.name }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <hr style="border-color:var(--bg-border); margin:24px 0">
+
+    <div id="alerts-config">
+      <h2 class="settings-section-title">Configuration des Alertes</h2>
+
+      <div class="toggle-setting">
+        <div class="toggle-info">
+          <div class="toggle-label">Notifications sonores</div>
+          <div class="toggle-desc">Bip audio lors des alertes critiques</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" checked>
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-setting">
+        <div class="toggle-info">
+          <div class="toggle-label">Enregistrement automatique des frames</div>
+          <div class="toggle-desc">Sauvegarder l'image lors d'une détection critique</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" checked>
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="toggle-setting">
+        <div class="toggle-info">
+          <div class="toggle-label">Alertes email</div>
+          <div class="toggle-desc">Envoyer un email pour les alertes critiques</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox">
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="form-group" style="margin-top:16px">
+        <label class="form-label">Dossier de sauvegarde des captures</label>
+        <input type="text" class="form-input" placeholder="./media/captures/" value="./media/captures/">
+      </div>
+    </div>
+
+    <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--bg-border)">
+      <button class="btn-save">Sauvegarder les paramètres</button>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

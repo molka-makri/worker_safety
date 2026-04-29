@@ -1,0 +1,534 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion — SafeVision AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <style>
+    html, body {
+      overflow: auto;
+      height: 100%;
+    }
+
+    .auth-page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 480px;
+      background: var(--bg-base);
+    }
+
+    .auth-left {
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--bg-border);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px;
+    }
+
+    .auth-left-bg {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 20% 60%, rgba(255,59,47,.08) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 40% at 80% 20%, rgba(0,194,255,.06) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 50% at 50% 100%, rgba(123,97,255,.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .auth-left-grid {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+    }
+
+    .auth-brand {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .auth-brand-logo {
+      width: 40px;
+      height: 40px;
+      background: rgba(255,59,47,.1);
+      border: 1px solid rgba(255,59,47,.25);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .auth-brand-name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: .1em;
+    }
+    .auth-brand-name .accent { color: var(--accent-red); }
+
+    .auth-visual {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hex-ring {
+      position: absolute;
+      border: 1px solid rgba(255,59,47,.15);
+      border-radius: 50%;
+      animation: ring-pulse 4s ease-in-out infinite;
+    }
+    .hex-ring:nth-child(1) { width: 200px; height: 200px; animation-delay: 0s; }
+    .hex-ring:nth-child(2) { width: 300px; height: 300px; animation-delay: .8s; border-color: rgba(0,194,255,.1); }
+    .hex-ring:nth-child(3) { width: 400px; height: 400px; animation-delay: 1.6s; border-color: rgba(123,97,255,.07); }
+
+    @keyframes ring-pulse {
+      0%, 100% { opacity: .4; transform: scale(1); }
+      50%       { opacity: 1;  transform: scale(1.03); }
+    }
+
+    .hex-center {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      background: rgba(255,59,47,.08);
+      border: 1px solid rgba(255,59,47,.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hex-icon {
+      width: 48px;
+      height: 48px;
+      color: var(--accent-red);
+      opacity: .9;
+    }
+
+    .floating-chips {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .float-chip {
+      position: absolute;
+      background: var(--bg-elevated);
+      border: 1px solid var(--bg-border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      animation: float-updown 3s ease-in-out infinite;
+      white-space: nowrap;
+    }
+    .float-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    .float-chip:nth-child(1) { top: 18%; left: 8%;  animation-delay: 0s; }
+    .float-chip:nth-child(2) { top: 22%; right: 6%; animation-delay: .7s; }
+    .float-chip:nth-child(3) { top: 55%; left: 5%;  animation-delay: 1.4s; }
+    .float-chip:nth-child(4) { top: 60%; right: 5%; animation-delay: 2s; }
+    .float-chip:nth-child(5) { top: 78%; left: 18%; animation-delay: .4s; }
+
+    @keyframes float-updown {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-6px); }
+    }
+
+    .auth-tagline {
+      position: relative;
+    }
+    .auth-tagline h2 {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .auth-tagline p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      font-family: var(--font-mono);
+      max-width: 380px;
+    }
+
+    .auth-right {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 40px;
+      background: var(--bg-base);
+    }
+
+    .auth-form-wrap {
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .auth-form-title {
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .auth-form-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      margin-bottom: 36px;
+    }
+
+    .auth-messages { margin-bottom: 20px; }
+    .auth-msg {
+      padding: 10px 14px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      margin-bottom: 8px;
+    }
+    .auth-msg.error   { background: rgba(255,59,47,.1);  border: 1px solid rgba(255,59,47,.25);  color: var(--accent-red); }
+    .auth-msg.success { background: rgba(74,227,181,.1); border: 1px solid rgba(74,227,181,.25); color: var(--accent-green); }
+
+    .auth-field { margin-bottom: 18px; }
+    .auth-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 7px;
+    }
+
+    .auth-input-wrap { position: relative; }
+    .auth-input-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      display: flex;
+    }
+    .auth-input {
+      width: 100%;
+      background: var(--bg-surface);
+      border: 1px solid var(--bg-border);
+      border-radius: 8px;
+      padding: 11px 12px 11px 38px;
+      color: var(--text-primary);
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .auth-input:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(0,194,255,.1);
+    }
+    .auth-input::placeholder {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .toggle-pwd {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px;
+      display: flex;
+      transition: color .15s;
+    }
+    .toggle-pwd:hover { color: var(--text-secondary); }
+
+    .auth-input.has-toggle { padding-right: 40px; }
+
+    .auth-options {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .auth-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .auth-checkbox input[type="checkbox"] {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 1px solid var(--bg-border);
+      border-radius: 4px;
+      background: var(--bg-surface);
+      cursor: pointer;
+      position: relative;
+      flex-shrink: 0;
+      transition: all .15s;
+    }
+    .auth-checkbox input:checked {
+      background: var(--accent-red);
+      border-color: var(--accent-red);
+    }
+    .auth-checkbox input:checked::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 5px;
+      width: 5px; height: 8px;
+      border: 2px solid white;
+      border-top: none;
+      border-left: none;
+      transform: rotate(45deg);
+    }
+
+    .auth-link {
+      font-size: 12px;
+      color: var(--accent-blue);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      transition: color .15s;
+    }
+    .auth-link:hover { color: var(--text-primary); }
+
+    .auth-btn {
+      width: 100%;
+      background: var(--accent-red);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .03em;
+      padding: 13px;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      margin-bottom: 24px;
+    }
+    .auth-btn:hover   { background: #e02d22; }
+    .auth-btn:active  { transform: scale(.99); }
+
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .auth-divider::before,
+    .auth-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--bg-border);
+    }
+    .auth-divider span {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      white-space: nowrap;
+      letter-spacing: .06em;
+    }
+
+    .auth-footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .field-error {
+      font-size: 11px;
+      color: var(--accent-red);
+      font-family: var(--font-mono);
+      margin-top: 5px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .auth-input.invalid { border-color: var(--accent-red); }
+  </style>
+</head>
+<body>
+
+<div class="auth-page">
+
+  <div class="auth-left">
+    <div class="auth-left-bg"></div>
+    <div class="auth-left-grid"></div>
+
+    <div class="auth-brand">
+      <div class="auth-brand-logo">
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+          <polygon points="16,3 29,26 3,26" stroke="#FF3B2F" stroke-width="2" fill="none"/>
+          <circle cx="16" cy="19" r="3" fill="#FF3B2F"/>
+          <line x1="16" y1="11" x2="16" y2="16" stroke="#FF3B2F" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="auth-brand-name">SAFE<span class="accent">VISION</span></span>
+    </div>
+
+    <div class="auth-visual">
+      <div class="hex-ring"></div>
+      <div class="hex-ring"></div>
+      <div class="hex-ring"></div>
+      <div class="hex-center">
+        <svg class="hex-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M9 12l2 2 4-4" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="floating-chips">
+        <div class="float-chip"><div class="dot" style="background:#4AE3B5"></div>EPI & Signalisation</div>
+        <div class="float-chip"><div class="dot" style="background:#FF3B2F"></div>Feu & Fumée</div>
+        <div class="float-chip"><div class="dot" style="background:#FFB800"></div>Fatigue & Chute</div>
+        <div class="float-chip"><div class="dot" style="background:#E040FB"></div>Machines & Proximité</div>
+        <div class="float-chip"><div class="dot" style="background:#00C2FF"></div>Tracking Multi-Zone</div>
+      </div>
+    </div>
+
+    <div class="auth-tagline">
+      <h2>Surveillance industrielle<br>par intelligence artificielle</h2>
+      <p>Plateforme de détection temps réel — 7 modules IA spécialisés pour la sécurité des travailleurs.</p>
+    </div>
+  </div>
+
+  <div class="auth-right">
+    <div class="auth-form-wrap">
+
+      <h1 class="auth-form-title">Connexion</h1>
+      <p class="auth-form-sub">Accédez à votre espace de surveillance</p>
+
+      {% if messages %}
+      <div class="auth-messages">
+        {% for message in messages %}
+        <div class="auth-msg {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="POST" action="{% url 'app:login' %}" id="login-form" novalidate>
+        {% csrf_token %}
+
+        <div class="auth-field">
+          <label class="auth-label" for="id_username">Identifiant</label>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </span>
+            <input
+              type="text"
+              id="id_username"
+              name="username"
+              class="auth-input {% if form.username.errors %}invalid{% endif %}"
+              placeholder="nom_utilisateur"
+              value="{{ form.username.value|default:'' }}"
+              autocomplete="username"
+              required
+            >
+          </div>
+          {% if form.username.errors %}
+          <div class="field-error">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1"/></svg>
+            {{ form.username.errors.0 }}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="auth-field">
+          <label class="auth-label" for="id_password">Mot de passe</label>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </span>
+            <input
+              type="password"
+              id="id_password"
+              name="password"
+              class="auth-input has-toggle {% if form.non_field_errors %}invalid{% endif %}"
+              placeholder="••••••••"
+              autocomplete="current-password"
+              required
+            >
+            <button type="button" class="toggle-pwd" onclick="togglePassword('id_password', this)" aria-label="Afficher le mot de passe">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          {% if form.non_field_errors %}
+          <div class="field-error">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1"/></svg>
+            Identifiant ou mot de passe incorrect.
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="auth-options">
+          <label class="auth-checkbox">
+            <input type="checkbox" name="remember_me">
+            Se souvenir de moi
+          </label>
+          <a href="#" class="auth-link">Mot de passe oublié ?</a>
+        </div>
+
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <button type="submit" class="auth-btn">Se connecter</button>
+      </form>
+
+      <div class="auth-divider"><span>PAS ENCORE DE COMPTE ?</span></div>
+
+      <div class="auth-footer">
+        <a href="{% url 'app:signup' %}" class="auth-link" style="font-size:13px; font-weight:700; color:var(--text-primary)">Créer un compte →</a>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+function togglePassword(inputId, btn) {
+  const input = document.getElementById(inputId);
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  btn.querySelector('svg').style.opacity = isHidden ? '1' : '0.5';
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,38 @@
+{% extends "safety_vision/base.html" %}
+{% block title %}Alertes — SafeVision AI{% endblock %}
+{% block page_title %}Alertes{% endblock %}
+{% block page_subtitle %}Historique et monitoring des incidents détectés{% endblock %}
+{% block content %}
+
+<div class="alerts-filters">
+  <button class="filter-btn active" onclick="filterAlerts('all', this)">Toutes</button>
+  <button class="filter-btn critical" onclick="filterAlerts('critical', this)">🔴 Critiques</button>
+  <button class="filter-btn warning" onclick="filterAlerts('warning', this)">🟡 Avertissements</button>
+  <button class="filter-btn info" onclick="filterAlerts('info', this)">🔵 Infos</button>
+  <div style="margin-left:auto; display:flex; gap:8px">
+    <select class="form-input" style="width:auto; padding:6px 10px; font-size:12px">
+      <option>Tous les modules</option>
+      <option>EPI & Signalisation</option>
+      <option>Posture & Comportement</option>
+      <option>Fatigue & Incapacité</option>
+      <option>Tracking & Objets</option>
+      <option>Risques Environnement</option>
+      <option>Feu & Fumée</option>
+      <option>Machines & Proximité</option>
+    </select>
+    <button class="btn-control">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+      Exporter CSV
+    </button>
+  </div>
+</div>
+
+<div id="alerts-container">
+  <div class="empty-state">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+    <p>Aucune alerte enregistrée</p>
+    <p style="font-size:10px">Les alertes apparaîtront ici lors de l'analyse</p>
+  </div>
+</div>
+
+{% endblock %}
