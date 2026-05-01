@@ -41,6 +41,10 @@ local_settings.py
 /staticfiles/
 db.sqlite3
 
+# AI model weights
+/models/*
+!/models/.gitkeep
+
 # Environment variables
 .env
 .env.local

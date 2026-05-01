@@ -6,11 +6,11 @@
 {% block content %}
 
 <div style="display:flex; gap:10px; margin-bottom:16px; align-items:center">
-  <button class="btn-control primary" onclick="startAllModules()">
+  <button class="btn-control primary" onclick="startCameras()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-    Lancer tous les modules
+    Lancer les caméras
   </button>
-  <button class="btn-control" onclick="stopAllModules()">Arrêter tout</button>
+  <button class="btn-control" onclick="stopCameras()">Arrêter les caméras</button>
   <div style="margin-left:auto; display:flex; gap:8px; align-items:center">
     <span style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted)">GRILLE</span>
     <button class="btn-control" id="layout-2x2" onclick="setLayout(2)" style="padding:5px 8px">2×2</button>
@@ -20,6 +20,7 @@
 
 <div class="live-grid" id="live-grid">
 
+  <!-- ── CAM 1 — Zone Production (Détection chute) ── -->
   <div class="cam-tile" id="cam-tile-1">
     <div class="cam-header">
       <div class="status-dot active"></div>
@@ -27,10 +28,12 @@
       <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam1-fps">— FPS</span>
     </div>
     <div class="cam-feed">
-      <div class="cam-feed-placeholder" id="cam-feed-1">
-        <div style="text-align:center; color:var(--text-muted)">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-          <p style="font-size:10px; margin-top:8px; font-family:var(--font-mono)">CAM 1 — En attente</p>
+      <video id="cam1-video" class="cam-video" src="/media/worker_falling3.mp4" muted loop playsinline preload="metadata"></video>
+      <canvas id="cam1-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam1-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: worker_falling3.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam1-fall-status">Détection: en attente…</span>
         </div>
       </div>
     </div>
@@ -38,10 +41,11 @@
       <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
       <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">EPI</span>
       <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">FEU</span>
-      <span class="toggle-chip on" style="--chip-color:#FFB800;--chip-rgb:255,184,0; font-size:9px; padding:2px 6px">FATIGUE</span>
+      <span class="toggle-chip on" style="--chip-color:#FFB800;--chip-rgb:255,184,0; font-size:9px; padding:2px 6px">CHUTE</span>
     </div>
   </div>
 
+  <!-- ── CAM 2 — Zone Machines (Détection fatigue) ── -->
   <div class="cam-tile" id="cam-tile-2">
     <div class="cam-header">
       <div class="status-dot active"></div>
@@ -49,40 +53,48 @@
       <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam2-fps">— FPS</span>
     </div>
     <div class="cam-feed">
-      <div class="cam-feed-placeholder" id="cam-feed-2">
-        <div style="text-align:center; color:var(--text-muted)">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-          <p style="font-size:10px; margin-top:8px; font-family:var(--font-mono)">CAM 2 — En attente</p>
+      <video id="cam2-video" class="cam-video" src="/media/worker_tired.mp4" muted loop playsinline preload="metadata"></video>
+      <canvas id="cam2-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam2-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: worker_tired.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam2-fatigue-status">Détection: en attente…</span>
         </div>
       </div>
     </div>
     <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
       <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#FFB800;--chip-rgb:255,184,0; font-size:9px; padding:2px 6px">FATIGUE</span>
       <span class="toggle-chip on" style="--chip-color:#E040FB;--chip-rgb:224,64,251; font-size:9px; padding:2px 6px">MACHINES</span>
       <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">TRACKING</span>
     </div>
   </div>
 
+  <!-- ── CAM 3 — Zone Test Chute (worker_falling3.mp4) ── -->
   <div class="cam-tile" id="cam-tile-3">
     <div class="cam-header">
-      <div class="status-dot" style="background:var(--text-muted)"></div>
-      <span>CAM 3 — Entrée/Sortie</span>
-      <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam3-fps">Hors ligne</span>
+      <div class="status-dot active"></div>
+      <span>CAM 3 — Zone Test Chute</span>
+      <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam3-fps">— FPS</span>
     </div>
     <div class="cam-feed">
-      <div class="cam-feed-placeholder" id="cam-feed-3">
-        <div style="text-align:center; color:var(--text-muted)">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-          <p style="font-size:10px; margin-top:8px; font-family:var(--font-mono)">CAM 3 — Hors ligne</p>
+      <video id="cam3-video" class="cam-video" src="/media/worker_falling3_fall.mp4" muted playsinline preload="auto"></video>
+      <canvas id="cam3-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam3-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: worker_falling3_fall.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam3-fall-status">Détection: en attente…</span>
         </div>
       </div>
     </div>
     <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
       <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
-      <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">TRACKING</span>
+      <span class="toggle-chip on" style="--chip-color:#FFB800;--chip-rgb:255,184,0; font-size:9px; padding:2px 6px">CHUTE</span>
+      <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">TEST</span>
     </div>
   </div>
 
+  <!-- ── CAM 4 — Fichier Vidéo (Upload manuel) ── -->
   <div class="cam-tile" id="cam-tile-4">
     <div class="cam-header">
       <div class="status-dot" style="background:var(--accent-blue)"></div>
@@ -105,6 +117,8 @@
       <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">Tous modules disponibles</span>
     </div>
   </div>
+
 </div>
+<div id="toast-container" class="toast-container"></div>
 
 {% endblock %}

@@ -817,8 +817,11 @@ html, body {
 }
 .alert-card:hover { border-color: var(--bg-hover); }
 .alert-card.critical { border-left: 3px solid var(--accent-red); }
-.alert-card.warning  { border-left: 3px solid var(--accent-yellow); }
-.alert-card.info     { border-left: 3px solid var(--accent-blue); }
+.alert-card.warning,
+.alert-card.high,
+.alert-card.medium  { border-left: 3px solid var(--accent-yellow); }
+.alert-card.info,
+.alert-card.low     { border-left: 3px solid var(--accent-blue); }
 
 .alert-card-icon {
   width: 40px;
@@ -1023,6 +1026,96 @@ html, body {
   aspect-ratio: 16/9;
   background: #000;
   position: relative;
+  overflow: hidden;
+}
+
+.cam-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
+.cam-video-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cam-overlay-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cam-video {
+  z-index: 0;
+}
+
+.cam-video-overlay {
+  z-index: 2;
+}
+
+.toast-container {
+  position: fixed;
+  bottom: 22px;
+  right: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.detection-toast {
+  min-width: 240px;
+  max-width: 320px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity .25s ease, transform .25s ease;
+  pointer-events: auto;
+}
+
+.detection-toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.detection-toast-info {
+  background: rgba(0, 194, 255, 0.92);
+}
+
+.detection-toast-critical {
+  background: rgba(255, 59, 47, 0.95);
+}
+
+.detection-toast-warning {
+  background: rgba(255, 184, 0, 0.95);
+  color: #121212;
 }
 
 .cam-feed-placeholder {

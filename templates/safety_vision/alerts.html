@@ -1,38 +1,297 @@
 {% extends "safety_vision/base.html" %}
-{% block title %}Alertes — SafeVision AI{% endblock %}
+{% block title %}Alertes - SafeVision AI{% endblock %}
 {% block page_title %}Alertes{% endblock %}
-{% block page_subtitle %}Historique et monitoring des incidents détectés{% endblock %}
+{% block page_subtitle %}Suivi des incidents detectes par les modules{% endblock %}
+
+{% block extra_css %}
+<style>
+  .alerts-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .alerts-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .alerts-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .alert-stat {
+    background: var(--bg-surface);
+    border: 1px solid var(--bg-border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .alert-stat-label {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .alert-stat-value {
+    font-size: 24px;
+    font-weight: 800;
+    margin-top: 4px;
+  }
+  .alerts-list-page {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .alert-card-title {
+    letter-spacing: 0;
+  }
+  .alert-card-desc {
+    line-height: 1.45;
+  }
+  .alert-card-severity {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--bg-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 82px;
+  }
+  .alert-card-severity.critical { color: var(--accent-red); background: rgba(255,59,47,.08); border-color: rgba(255,59,47,.24); }
+  .alert-card-severity.warning,
+  .alert-card-severity.high,
+  .alert-card-severity.medium { color: var(--accent-yellow); background: rgba(255,184,0,.08); border-color: rgba(255,184,0,.24); }
+  .alert-card-severity.low,
+  .alert-card-severity.info { color: var(--accent-blue); background: rgba(0,194,255,.08); border-color: rgba(0,194,255,.24); }
+  .btn-danger-soft {
+    border-color: rgba(255,59,47,.3);
+    color: var(--accent-red);
+  }
+  .btn-danger-soft:hover {
+    background: rgba(255,59,47,.08);
+    color: var(--accent-red);
+  }
+  @media (max-width: 900px) {
+    .alerts-summary { grid-template-columns: 1fr; }
+    .alerts-actions { margin-left: 0; width: 100%; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 
-<div class="alerts-filters">
-  <button class="filter-btn active" onclick="filterAlerts('all', this)">Toutes</button>
-  <button class="filter-btn critical" onclick="filterAlerts('critical', this)">🔴 Critiques</button>
-  <button class="filter-btn warning" onclick="filterAlerts('warning', this)">🟡 Avertissements</button>
-  <button class="filter-btn info" onclick="filterAlerts('info', this)">🔵 Infos</button>
-  <div style="margin-left:auto; display:flex; gap:8px">
-    <select class="form-input" style="width:auto; padding:6px 10px; font-size:12px">
-      <option>Tous les modules</option>
-      <option>EPI & Signalisation</option>
-      <option>Posture & Comportement</option>
-      <option>Fatigue & Incapacité</option>
-      <option>Tracking & Objets</option>
-      <option>Risques Environnement</option>
-      <option>Feu & Fumée</option>
-      <option>Machines & Proximité</option>
+<div class="alerts-summary">
+  <div class="alert-stat">
+    <div class="alert-stat-label">Total</div>
+    <div class="alert-stat-value" id="stat-total">{{ alerts|length }}</div>
+  </div>
+  <div class="alert-stat">
+    <div class="alert-stat-label">Critiques</div>
+    <div class="alert-stat-value text-red" id="stat-critical">0</div>
+  </div>
+  <div class="alert-stat">
+    <div class="alert-stat-label">Non critiques</div>
+    <div class="alert-stat-value text-yellow" id="stat-noncritical">0</div>
+  </div>
+</div>
+
+<div class="alerts-toolbar">
+  <button class="filter-btn active" data-filter="all" onclick="filterAlertsPage('all', this)">Toutes</button>
+  <button class="filter-btn critical" data-filter="critical" onclick="filterAlertsPage('critical', this)">Critiques</button>
+  <button class="filter-btn warning" data-filter="noncritical" onclick="filterAlertsPage('noncritical', this)">Non critiques</button>
+  <button class="filter-btn warning" data-filter="warning" onclick="filterAlertsPage('warning', this)">Avertissements</button>
+  <button class="filter-btn info" data-filter="info" onclick="filterAlertsPage('info', this)">Infos</button>
+
+  <div class="alerts-actions">
+    <select id="module-filter" class="form-input" style="width:auto; min-width:190px; padding:6px 10px; font-size:12px" onchange="applyAlertFilters()">
+      <option value="all">Tous les modules</option>
+      {% for module in modules %}
+      <option value="{{ module.name|lower }}">{{ module.name }}</option>
+      {% endfor %}
     </select>
-    <button class="btn-control">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+    <button class="btn-control" onclick="exportAlertsCsv()">
       Exporter CSV
+    </button>
+    <button class="btn-control btn-danger-soft" onclick="deleteAllAlerts()">
+      Supprimer tous
     </button>
   </div>
 </div>
 
-<div id="alerts-container">
-  <div class="empty-state">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
-    <p>Aucune alerte enregistrée</p>
-    <p style="font-size:10px">Les alertes apparaîtront ici lors de l'analyse</p>
-  </div>
+<div id="sv-alerts-container" class="alerts-list-page">
+  {% if alerts %}
+    {% for alert in alerts %}
+    <div class="alert-card {{ alert.severity }}"
+         data-severity="{{ alert.severity }}"
+         data-module="{{ alert.module.name|lower }}">
+      <div class="alert-card-icon" style="background:rgba(255,59,47,.08); color:var(--accent-red)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div>
+        <div class="alert-card-title">{{ alert.title }}</div>
+        <div class="alert-card-desc">{{ alert.description }}</div>
+        <div class="alert-card-cam">{{ alert.module.name }}</div>
+      </div>
+      <div class="alert-card-meta">
+        <span class="alert-card-severity {{ alert.severity }}">{{ alert.severity }}</span>
+        <div class="alert-card-time">{{ alert.timestamp|date:'d/m/Y H:i:s' }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state" id="alerts-empty-state">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+      </svg>
+      <p>Aucune alerte enregistree</p>
+      <p style="font-size:10px">Les incidents detectes apparaitront ici.</p>
+    </div>
+  {% endif %}
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let activeAlertFilter = 'all';
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return m ? m[2] : '';
+}
+
+function severityGroup(severity) {
+  if (severity === 'critical') return 'critical';
+  if (severity === 'info' || severity === 'low') return 'info';
+  return 'warning';
+}
+
+function visibleAlertCards() {
+  return Array.from(document.querySelectorAll('#sv-alerts-container .alert-card'))
+    .filter(card => card.style.display !== 'none');
+}
+
+function updateAlertStats() {
+  const cards = Array.from(document.querySelectorAll('#sv-alerts-container .alert-card'));
+  const critical = cards.filter(card => card.dataset.severity === 'critical').length;
+  document.getElementById('stat-total').textContent = cards.length;
+  document.getElementById('stat-critical').textContent = critical;
+  document.getElementById('stat-noncritical').textContent = Math.max(0, cards.length - critical);
+}
+
+function setEmptyState(show) {
+  let empty = document.getElementById('alerts-empty-state');
+  const container = document.getElementById('sv-alerts-container');
+  if (!empty && show) {
+    empty = document.createElement('div');
+    empty.id = 'alerts-empty-state';
+    empty.className = 'empty-state';
+    empty.innerHTML = '<p>Aucune alerte pour ce filtre</p>';
+    container.appendChild(empty);
+  }
+  if (empty) empty.style.display = show ? 'flex' : 'none';
+}
+
+function applyAlertFilters() {
+  const moduleValue = document.getElementById('module-filter').value;
+  const cards = Array.from(document.querySelectorAll('#sv-alerts-container .alert-card'));
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const severity = card.dataset.severity;
+    const group = severityGroup(severity);
+    const matchesSeverity =
+      activeAlertFilter === 'all' ||
+      activeAlertFilter === severity ||
+      activeAlertFilter === group ||
+      (activeAlertFilter === 'noncritical' && severity !== 'critical');
+    const matchesModule = moduleValue === 'all' || card.dataset.module === moduleValue;
+    const visible = matchesSeverity && matchesModule;
+    card.style.display = visible ? 'grid' : 'none';
+    if (visible) visibleCount++;
+  });
+
+  setEmptyState(cards.length === 0 || visibleCount === 0);
+}
+
+function filterAlertsPage(type, button) {
+  activeAlertFilter = type;
+  document.querySelectorAll('.alerts-toolbar .filter-btn').forEach(btn => btn.classList.remove('active'));
+  button.classList.add('active');
+  applyAlertFilters();
+}
+
+function exportAlertsCsv() {
+  const rows = visibleAlertCards().map(card => ({
+    module: card.dataset.module,
+    severite: card.dataset.severity,
+    titre: card.querySelector('.alert-card-title')?.innerText.trim() || '',
+    description: card.querySelector('.alert-card-desc')?.innerText.trim() || '',
+    date: card.querySelector('.alert-card-time')?.innerText.trim() || '',
+  }));
+  if (!rows.length) {
+    showPopupNotification('Aucune alerte a exporter', 'info', false);
+    return;
+  }
+  const header = ['module', 'severite', 'titre', 'description', 'date'];
+  const csv = [
+    header.join(';'),
+    ...rows.map(row => header.map(key => `"${String(row[key] || '').replace(/"/g, '""')}"`).join(';')),
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `safevision-alertes-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  showPopupNotification('Export CSV genere', 'info', false);
+}
+
+async function deleteAllAlerts() {
+  const cards = document.querySelectorAll('#sv-alerts-container .alert-card');
+  if (!cards.length) {
+    showPopupNotification('Aucune alerte a supprimer', 'info', false);
+    return;
+  }
+  if (!confirm('Supprimer toutes les alertes ?')) return;
+
+  const res = await fetch('/api/alerts/clear/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+  });
+  const data = await res.json();
+  if (data.status !== 'success') {
+    showPopupNotification('Suppression impossible', 'critical', false);
+    return;
+  }
+
+  const container = document.getElementById('sv-alerts-container');
+  container.innerHTML = `
+    <div class="empty-state" id="alerts-empty-state">
+      <p>Aucune alerte enregistree</p>
+      <p style="font-size:10px">Les incidents detectes apparaitront ici.</p>
+    </div>`;
+  updateAlertStats();
+  showPopupNotification('Toutes les alertes ont ete supprimees', 'info', false);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  updateAlertStats();
+  applyAlertFilters();
+});
+</script>
 {% endblock %}
