@@ -1,206 +1,247 @@
 #!/usr/bin/env python
 """
-Module de détection de chute avancée
-Utilise MediaPipe Pose pour une vraie détection de chute
+fall_detector.py — SafeVision AI
+==================================
+Détection de chute avec YOLO (fall_detection.pt).
+
+IMPORTANT — classes de votre modèle :
+  Le modèle retourne plusieurs classes. On filtre uniquement les personnes
+  en état de chute en se basant sur :
+    1. Le NOM de la classe (label contenant 'fall', 'down', 'chute', 'fallen')
+    2. L'aspect ratio de la bounding box (personne allongée = largeur > hauteur)
+    3. La position verticale dans le frame (personne au sol = bas de l'image)
 """
+
 import cv2
 import numpy as np
-import math
+import os
 from typing import Tuple, Dict, Any
 
+# ── Chemin vers le modèle ──────────────────────────────────────────────────────
+BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
+FALL_MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, '..', 'models', 'fall_detection.pt'))
+
+CONF_THRESHOLD = 0.45
+
+# ── Labels qui indiquent une chute (insensible à la casse) ────────────────────
+FALL_LABELS = {'fall', 'fallen', 'down', 'chute', 'tombé', 'fall_down', 'falling'}
+
+# ── Chargement YOLO ────────────────────────────────────────────────────────────
+YOLO_AVAILABLE = False
+yolo_model     = None
+
 try:
-    import mediapipe as mp
-    MEDIAPIPE_AVAILABLE = True
-    mp_pose = mp.solutions.pose
-    pose = mp_pose.Pose(
-        static_image_mode=True,
-        model_complexity=1,
-        enable_segmentation=False,
-        min_detection_confidence=0.5
-    )
-except ImportError:
-    MEDIAPIPE_AVAILABLE = False
-    print("MediaPipe non disponible, utilisation de la simulation")
+    from ultralytics import YOLO
+
+    if os.path.exists(FALL_MODEL_PATH):
+        yolo_model     = YOLO(FALL_MODEL_PATH)
+        YOLO_AVAILABLE = True
+        print(f"[FallDetector] OK: Model loaded: {FALL_MODEL_PATH}")
+
+        # ── SHOW ALL MODEL CLASSES AT STARTUP ──
+        print("[FallDetector] Model classes:")
+        for cls_id, cls_name in yolo_model.names.items():
+            print(f"   class {cls_id} -> '{cls_name}'")
+    else:
+        print(f"[FallDetector] WARNING: Model not found: {FALL_MODEL_PATH}")
+except ImportError as e:
+    print(f"[FallDetector] WARNING: ultralytics not installed: {e}")
+
+
+def _is_fall_label(label: str) -> bool:
+    """Retourne True si le label correspond à une chute."""
+    return label.lower().strip() in FALL_LABELS
+
+
+def _is_fallen_by_shape(x1: int, y1: int, x2: int, y2: int, frame_h: int) -> bool:
+    """
+    Heuristique géométrique : une personne allongée a une bbox plus large que haute
+    ET se trouve dans la moitié basse du frame.
+    """
+    w = x2 - x1
+    h = y2 - y1
+    if h == 0:
+        return False
+    aspect_ratio   = w / h
+    center_y_ratio = (y1 + h / 2) / frame_h
+
+    return aspect_ratio > 1.1 and center_y_ratio > 0.30
+
+
+def _bbox_iou(a, b) -> float:
+    if not a or not b:
+        return 0.0
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+    inter = iw * ih
+    area_a = max(1, (ax2 - ax1) * (ay2 - ay1))
+    area_b = max(1, (bx2 - bx1) * (by2 - by1))
+    return inter / (area_a + area_b - inter)
+
 
 class FallDetector:
-    """Détecteur de chute utilisant MediaPipe Pose"""
 
     def __init__(self):
-        self.pose = None
-        if MEDIAPIPE_AVAILABLE:
-            self.pose = mp_pose.Pose(
-                static_image_mode=True,
-                model_complexity=1,
-                enable_segmentation=False,
-                min_detection_confidence=0.5
-            )
+        self.model     = yolo_model
+        self.available = YOLO_AVAILABLE
+        self._fall_streak = 0
+        self._last_fall_bbox = None
 
     def detect_fall(self, frame: np.ndarray) -> Tuple[bool, float, Dict[str, Any]]:
-        """
-        Détecte les chutes dans une image
-
-        Args:
-            frame: Image OpenCV (BGR)
-
-        Returns:
-            Tuple (fall_detected, confidence, details)
-        """
-        if not MEDIAPIPE_AVAILABLE or self.pose is None:
-            # Fallback vers simulation
-            return self._simulate_detection(frame)
-
+        if not self.available or self.model is None:
+            return self._fallback_detection(frame)
         try:
-            # Convertir en RGB pour MediaPipe
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            # Traiter l'image
-            results = self.pose.process(rgb_frame)
-
-            if not results.pose_landmarks:
-                return False, 0.0, {
-                    'error': 'Aucune pose détectée',
-                    'landmarks_count': 0
-                }
-
-            # Extraire les landmarks
-            landmarks = results.pose_landmarks.landmark
-
-            # Calculer les métriques de chute
-            fall_detected, confidence, details = self._analyze_pose(landmarks, frame.shape)
-
-            return fall_detected, confidence, details
-
+            results = self.model(frame, conf=CONF_THRESHOLD, verbose=False)
+            return self._parse_results(results, frame.shape)
         except Exception as e:
-            print(f"Erreur lors de la détection: {e}")
-            return self._simulate_detection(frame)
+            print(f"[FallDetector] Erreur YOLO : {e}")
+            return self._fallback_detection(frame)
 
-    def _analyze_pose(self, landmarks, frame_shape) -> Tuple[bool, float, Dict[str, Any]]:
-        """
-        Analyse la pose pour détecter les chutes
-        """
-        # Points clés pour l'analyse
-        nose = landmarks[mp_pose.PoseLandmark.NOSE]
-        left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP]
-        right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP]
-        left_knee = landmarks[mp_pose.PoseLandmark.LEFT_KNEE]
-        right_knee = landmarks[mp_pose.PoseLandmark.RIGHT_KNEE]
-        left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE]
-        right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE]
+    def _parse_results(self, results, frame_shape) -> Tuple[bool, float, Dict[str, Any]]:
+        height, width   = frame_shape[:2]
+        raw_fall_detected = False
+        best_confidence = 0.0
+        best_bbox       = None
+        all_detections  = []
 
-        # Calculer le centre de masse approximatif
-        hip_center_y = (left_hip.y + right_hip.y) / 2
-        knee_center_y = (left_knee.y + right_knee.y) / 2
-        ankle_center_y = (left_ankle.y + right_ankle.y) / 2
+        for result in results:
+            boxes = result.boxes
+            if boxes is None or len(boxes) == 0:
+                continue
 
-        # Calculer les ratios verticaux
-        body_ratio = (ankle_center_y - hip_center_y) / max(hip_center_y - nose.y, 0.1)
-        leg_ratio = (ankle_center_y - knee_center_y) / max(knee_center_y - hip_center_y, 0.1)
+            for box in boxes:
+                cls_id         = int(box.cls[0])
+                conf           = float(box.conf[0])
+                xyxy           = box.xyxy[0].tolist()
+                x1, y1, x2, y2 = [int(v) for v in xyxy]
+                label          = result.names.get(cls_id, str(cls_id))
 
-        # Calculer l'angle du torse (simplifié)
-        shoulder_center_x = (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER].x +
-                           landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER].x) / 2
-        shoulder_center_y = (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER].y +
-                           landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER].y) / 2
+                # DEBUG — visible in Django logs / terminal
+                print(f"[FallDetector] DETECT cls={cls_id} label='{label}' conf={conf:.2f} "
+                      f"bbox=[{x1},{y1},{x2},{y2}]")
 
-        torso_angle = math.degrees(math.atan2(
-            hip_center_y - shoulder_center_y,
-            abs(shoulder_center_x - (left_hip.x + right_hip.x) / 2)
-        ))
+                all_detections.append({
+                    'class_id':   cls_id,
+                    'label':      label,
+                    'confidence': round(conf, 3),
+                    'bbox':       [x1, y1, x2, y2],
+                })
 
-        # Critères de chute
-        is_horizontal = torso_angle < 45  # Torse presque horizontal
-        is_compact = body_ratio < 1.2     # Corps compact (plié)
-        legs_close = leg_ratio < 1.5      # Jambes rapprochées
+                # Critère 1 : label explicitement de type "fall/down/chute…"
+                by_label = _is_fall_label(label)
 
-        # Calcul de la confiance
-        confidence = 0.0
-        if is_horizontal:
-            confidence += 0.4
-        if is_compact:
-            confidence += 0.3
-        if legs_close:
-            confidence += 0.3
+                # Critère 2 : forme horizontale + position basse dans le frame
+                by_shape = _is_fallen_by_shape(x1, y1, x2, y2, height)
 
-        # Ajuster selon la position verticale
-        vertical_position = hip_center_y
-        if vertical_position > 0.7:  # Bas de l'image
-            confidence += 0.2
+                is_fall = by_label and conf >= CONF_THRESHOLD
 
-        fall_detected = confidence > 0.7
+                print(f"[FallDetector]    → by_label={by_label}  by_shape={by_shape} "
+                      f"conf_ok={conf >= CONF_THRESHOLD}  → is_fall={is_fall}")
 
-        details = {
-            'landmarks_count': len(landmarks),
-            'body_ratio': round(body_ratio, 2),
-            'leg_ratio': round(leg_ratio, 2),
-            'torso_angle': round(torso_angle, 1),
-            'vertical_position': round(vertical_position, 2),
-            'is_horizontal': is_horizontal,
-            'is_compact': is_compact,
-            'legs_close': legs_close,
-            'model': 'MediaPipe_Pose_FallDetection',
-            'processing_method': 'pose_estimation'
-        }
+                if is_fall and conf > best_confidence:
+                    best_confidence = conf
+                    raw_fall_detected = True
+                    best_bbox       = [x1, y1, x2, y2]
 
-        return fall_detected, min(confidence, 1.0), details
+        if raw_fall_detected:
+            same_target = _bbox_iou(best_bbox, self._last_fall_bbox) > 0.12
+            self._fall_streak = self._fall_streak + 1 if same_target else 1
+            self._last_fall_bbox = best_bbox
+        else:
+            self._fall_streak = 0
+            self._last_fall_bbox = None
 
-    def _simulate_detection(self, frame: np.ndarray) -> Tuple[bool, float, Dict[str, Any]]:
-        """
-        Simulation de détection quand MediaPipe n'est pas disponible
-        """
-        height, width = frame.shape[:2]
-
-        # Analyse basique de la couleur et du mouvement
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        mean_brightness = np.mean(gray)
-
-        # Calculer des métriques simples
-        std_brightness = np.std(gray)
-        edge_density = np.mean(cv2.Canny(gray, 100, 200)) / 255.0
-
-        # Simulation de détection basée sur des seuils
-        confidence = min(0.95, (std_brightness / 50.0) * 0.3 + edge_density * 0.4 +
-                      (1.0 - mean_brightness / 255.0) * 0.3)
-
-        # Ajouter un peu d'aléatoire pour la simulation
-        confidence += np.random.normal(0, 0.1)
-        confidence = np.clip(confidence, 0.1, 0.95)
-
-        fall_detected = confidence > 0.7
+        fall_detected = raw_fall_detected and (self._fall_streak >= 2 or best_confidence >= 0.75)
 
         details = {
-            'brightness': round(mean_brightness, 1),
-            'std_brightness': round(std_brightness, 1),
-            'edge_density': round(edge_density, 3),
-            'dimensions': [width, height],
-            'model': 'Simulation_FallDetection',
-            'processing_method': 'basic_image_analysis',
-            'note': 'MediaPipe non disponible, mode simulation'
+            'model':             'YOLO_fall_detection.pt',
+            'processing_method': 'yolo_inference',
+            'detections':        all_detections,
+            'bbox':              best_bbox,
+            'fall_class_found':  fall_detected,
+            'raw_fall_found':    raw_fall_detected,
+            'fall_streak':       self._fall_streak,
         }
 
-        return fall_detected, confidence, details
+        return fall_detected, min(best_confidence, 1.0) if fall_detected else 0.0, details
 
-# Instance globale du détecteur
+    def _fallback_detection(self, frame: np.ndarray) -> Tuple[bool, float, Dict[str, Any]]:
+        return False, 0.0, {
+            'model':             'YOLO_fall_detection.pt',
+            'processing_method': 'model_unavailable',
+            'bbox':              None,
+            'model_available':   False,
+            'note':              f'Modele YOLO introuvable: {FALL_MODEL_PATH}',
+        }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 fall_detector = FallDetector()
 
+
 def detect_fall_in_frame(frame: np.ndarray) -> Tuple[bool, float, Dict[str, Any]]:
-    """
-    Fonction principale pour détecter les chutes
-    """
     return fall_detector.detect_fall(frame)
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 if __name__ == '__main__':
-    # Test du module
-    print("Test du détecteur de chute...")
+    """
+    Lance ce script directement sur votre vidéo pour voir
+    EXACTEMENT ce que le modèle détecte frame par frame.
 
-    # Créer une image de test
-    test_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    test_frame[:, :] = [150, 150, 150]
+    Usage :
+        python fall_detector.py
+        python fall_detector.py chemin/vers/worker_falling3.mp4
+    """
+    import sys
 
-    # Ajouter une forme qui pourrait ressembler à une personne tombée
-    cv2.ellipse(test_frame, (320, 400), (80, 40), 0, 0, 360, (200, 200, 200), -1)
+    video_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE_DIR, '..', 'media', 'worker_falling3.mp4')
 
-    fall_detected, confidence, details = detect_fall_in_frame(test_frame)
+    if not os.path.exists(video_path):
+        print(f"❌ Vidéo introuvable : {video_path}")
+        sys.exit(1)
 
-    print(f"Chute détectée: {fall_detected}")
-    print(f"Confiance: {confidence:.2%}")
-    print("Détails:", details)
+    print(f"\n🎬 Analyse de : {video_path}")
+    print("=" * 60)
+
+    cap        = cv2.VideoCapture(video_path)
+    frame_idx  = 0
+    fall_count = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        frame_idx += 1
+        if frame_idx % 10 != 0:   # analyser 1 frame sur 10
+            continue
+
+        detected, conf, details = detect_fall_in_frame(frame)
+
+        state = "🔴 FALL" if detected else "🟢 NORMAL"
+        print(f"\nFrame {frame_idx:04d} → {state}  conf={conf:.2f}")
+        for d in details.get('detections', []):
+            print(f"   cls={d['class_id']} '{d['label']}' conf={d['confidence']} bbox={d['bbox']}")
+
+        if detected:
+            fall_count += 1
+
+        # Affichage avec annotation YOLO
+        if YOLO_AVAILABLE:
+            results   = yolo_model(frame, conf=CONF_THRESHOLD, verbose=False)
+            annotated = results[0].plot()
+            color     = (0, 0, 255) if detected else (0, 255, 0)
+            cv2.putText(annotated, "FALL" if detected else "NORMAL",
+                        (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 3)
+            cv2.imshow("Fall Detection Debug", annotated)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    print(f"\n{'='*60}")
+    print(f"✅ Terminé — {fall_count} chutes sur {frame_idx // 10} frames analysées")
