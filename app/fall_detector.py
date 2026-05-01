@@ -169,38 +169,12 @@ class FallDetector:
         return fall_detected, min(best_confidence, 1.0) if fall_detected else 0.0, details
 
     def _fallback_detection(self, frame: np.ndarray) -> Tuple[bool, float, Dict[str, Any]]:
-        if frame is None:
-            return False, 0.0, {'model': 'Fallback', 'bbox': None, 'note': 'Frame None'}
-
-        height, width = frame.shape[:2]
-        gray          = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        edges         = cv2.Canny(gray, 80, 180)
-        edge_density  = float(np.mean(edges) / 255.0)
-        contours, _   = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        bbox       = None
-        confidence = 0.20
-
-        if contours:
-            largest = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(largest) > 800:
-                x, y, w, h = cv2.boundingRect(largest)
-                bbox       = [x, y, x + w, y + h]
-                aspect     = w / max(h, 1)
-                vert_pos   = (y + h / 2) / height
-                if aspect > 1.1 and vert_pos > 0.30:
-                    confidence = 0.65 + min(0.20, edge_density * 0.4)
-                else:
-                    confidence = 0.25 + edge_density * 0.2
-
-        confidence    = float(np.clip(confidence, 0.0, 0.95))
-        fall_detected = confidence > 0.60
-
-        return fall_detected, confidence, {
-            'model':             'Fallback_contour',
-            'processing_method': 'contour_analysis',
-            'bbox':              bbox,
-            'note':              'YOLO non disponible',
+        return False, 0.0, {
+            'model':             'YOLO_fall_detection.pt',
+            'processing_method': 'model_unavailable',
+            'bbox':              None,
+            'model_available':   False,
+            'note':              f'Modele YOLO introuvable: {FALL_MODEL_PATH}',
         }
 
 
