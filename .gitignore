@@ -48,3 +48,13 @@ db.sqlite3
 # Environment variables
 .env
 .env.local
+
+
+*.pt
+*.pth
+*.mp4
+*.avi
+runs/
+db.sqlite3
+test_yolo.py
+test_sign_video.py

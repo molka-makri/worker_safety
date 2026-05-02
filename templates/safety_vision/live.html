@@ -74,7 +74,7 @@
   <div class="cam-tile" id="cam-tile-3">
     <div class="cam-header">
       <div class="status-dot active"></div>
-      <span>CAM 3 — Zone Test Chute</span>
+      <span>CAM 3 — Spill Detection</span>
       <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam3-fps">— FPS</span>
     </div>
     <div class="cam-feed">
@@ -83,35 +83,35 @@
       <div class="cam-video-overlay" id="cam3-video-overlay">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
           <span style="font-size:10px; font-family:var(--font-mono);">Fichier: spill.mp4</span>
-          <span style="font-size:10px; font-family:var(--font-mono);" id="cam3-fall-status">Détection: en attente…</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam3-spill-status">Détection: en attente…</span>
         </div>
       </div>
     </div>
     <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
       <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
-      <span class="toggle-chip on" style="--chip-color:#FFB800;--chip-rgb:255,184,0; font-size:9px; padding:2px 6px">CHUTE</span>
+      <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">SPILL</span>
       <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">TEST</span>
     </div>
   </div>
 
-  <!-- ── CAM 4 — Fichier Vidéo (Upload manuel) ── -->
+  <!-- ── CAM 4 — PPE Detection (Motaz) ── -->
   <div class="cam-tile" id="cam-tile-4">
     <div class="cam-header">
-      <div class="status-dot" style="background:var(--accent-blue)"></div>
-      <span>Fichier Vidéo</span>
+      <div class="status-dot" style="background:var(--accent-purple)"></div>
+      <span>CAM 4 — PPE Detection</span>
       <span style="margin-left:auto">
-        <button onclick="document.getElementById('video-upload').click()" style="font-size:10px; background:none; border:1px solid var(--bg-border); color:var(--accent-blue); padding:2px 8px; border-radius:4px; cursor:pointer; font-family:var(--font-mono)">
+        <button onclick="document.getElementById('video-upload').click()" style="font-size:10px; background:none; border:1px solid var(--bg-border); color:var(--accent-purple); padding:2px 8px; border-radius:4px; cursor:pointer; font-family:var(--font-mono)">
           Charger...
         </button>
       </span>
     </div>
     <div class="cam-feed">
-      <video id="cam4-video" class="cam-video" src="/media/spill2.mp4" muted loop playsinline preload="auto"></video>
+      <video id="cam4-video" class="cam-video" src="/media/ppe_video.mp4" muted loop playsinline preload="auto"></video>
       <canvas id="cam4-overlay-canvas" class="cam-overlay-canvas"></canvas>
       <div class="cam-video-overlay" id="cam4-video-overlay">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: spill2.mp4</span>
-          <span style="font-size:10px; font-family:var(--font-mono);" id="cam4-spill-status">Detection: en attente...</span>
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: ppe_video.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam4-ppe-status">Detection: en attente...</span>
         </div>
       </div>
       <div class="cam-feed-placeholder" id="cam-feed-4" style="display:none">
@@ -122,7 +122,10 @@
       </div>
     </div>
     <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
-      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">Tous modules disponibles</span>
+      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#E040FB;--chip-rgb:224,64,251; font-size:9px; padding:2px 6px">HELMET</span>
+      <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">VEST</span>
+      <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">BOOTS</span>
     </div>
   </div>
 
@@ -172,6 +175,33 @@
       <span style="font-size:10px; font-family:var(--font-mono); margin-left:auto" id="cam6-exit-status-secondary">Detection: en attente...</span>
     </div>
   </div>
+
+
+    <!-- ── CAM 7 — Sign Defect Detection ── -->
+  <div class="cam-tile" id="cam-tile-7">
+    <div class="cam-header">
+      <div class="status-dot" style="background:var(--accent-purple)"></div>
+      <span>CAM 7 — Sign Defect Detection</span>
+      <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam7-fps">— FPS</span>
+    </div>
+    <div class="cam-feed">
+      <video id="cam7-video" class="cam-video" src="/media/construction_signs2.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="cam7-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam7-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: Construction Signs2.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam7-sign-status">Detection: en attente...</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
+      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">ROUTER</span>
+      <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">DEFECT</span>
+    </div>
+  </div>
+
+</div> <!-- End of live-grid -->
 
 </div>
 <div id="toast-container" class="toast-container"></div>
