@@ -78,11 +78,11 @@
       <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam3-fps">— FPS</span>
     </div>
     <div class="cam-feed">
-      <video id="cam3-video" class="cam-video" src="/media/worker_falling3_fall.mp4" muted playsinline preload="auto"></video>
+      <video id="cam3-video" class="cam-video" src="/media/spill.mp4" muted playsinline preload="auto"></video>
       <canvas id="cam3-overlay-canvas" class="cam-overlay-canvas"></canvas>
       <div class="cam-video-overlay" id="cam3-video-overlay">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: worker_falling3_fall.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: spill.mp4</span>
           <span style="font-size:10px; font-family:var(--font-mono);" id="cam3-fall-status">Détection: en attente…</span>
         </div>
       </div>
@@ -106,7 +106,15 @@
       </span>
     </div>
     <div class="cam-feed">
-      <div class="cam-feed-placeholder" id="cam-feed-4">
+      <video id="cam4-video" class="cam-video" src="/media/spill2.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="cam4-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam4-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: spill2.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam4-spill-status">Detection: en attente...</span>
+        </div>
+      </div>
+      <div class="cam-feed-placeholder" id="cam-feed-4" style="display:none">
         <div style="text-align:center; color:var(--text-muted)">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           <p style="font-size:10px; margin-top:8px; font-family:var(--font-mono)">Aucun fichier chargé</p>
@@ -115,6 +123,53 @@
     </div>
     <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
       <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">Tous modules disponibles</span>
+    </div>
+  </div>
+
+  <div class="cam-tile" id="cam-tile-5">
+    <div class="cam-header">
+      <div class="status-dot" style="background:var(--accent-orange)"></div>
+      <span>CAM 5 - Manhole Depth Test</span>
+      <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam5-fps">- FPS</span>
+    </div>
+    <div class="cam-feed">
+      <video id="cam5-video" class="cam-video" src="/media/hole.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="cam5-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam5-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: hole.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam5-manhole-status">Detection: en attente...</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
+      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">MANHOLE</span>
+      <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">DEPTH</span>
+    </div>
+  </div>
+
+  <div class="cam-tile" id="cam-tile-6">
+    <div class="cam-header">
+      <div class="status-dot" style="background:var(--accent-red)"></div>
+      <span>CAM 6 - Exit Emergency Test</span>
+      <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam6-fps">- FPS</span>
+    </div>
+    <div class="cam-feed">
+      <video id="cam6-video" class="cam-video" src="/media/exit_emergency.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="cam6-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam6-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: exit_emergency.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam6-exit-status">Detection: en attente...</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
+      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">EXIT</span>
+      <span class="toggle-chip on" style="--chip-color:#FFB800;--chip-rgb:255,184,0; font-size:9px; padding:2px 6px">OBSTACLE</span>
+      <span style="font-size:10px; font-family:var(--font-mono); margin-left:auto" id="cam6-exit-status-secondary">Detection: en attente...</span>
     </div>
   </div>
 
