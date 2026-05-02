@@ -17,6 +17,10 @@ from .views import (
     api_fall_detection_batch,
     api_fatigue_detection,
     api_fatigue_detection_batch,
+    api_spill_detection,
+    api_manhole_detection,
+    api_manhole_depth,
+    api_blocked_exit_detection,
 )
 
 app_name = 'app'
@@ -48,4 +52,10 @@ urlpatterns = [
     # ── API — Détection de fatigue ─────────────────────────
     path('api/fatigue-detection/',       api_fatigue_detection,       name='api_fatigue_detection'),
     path('api/fatigue-detection/batch/', api_fatigue_detection_batch, name='api_fatigue_detection_batch'),
+
+    # Detection de deversement chimique
+    path('api/spill-detection/', api_spill_detection, name='api_spill_detection'),
+    path('api/manhole-detection/', api_manhole_detection, name='api_manhole_detection'),
+    path('api/manhole-depth/', api_manhole_depth, name='api_manhole_depth'),
+    path('api/blocked-exit-detection/', api_blocked_exit_detection, name='api_blocked_exit_detection'),
 ]
