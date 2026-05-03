@@ -5,6 +5,7 @@ from django.contrib.auth import login
 from django.contrib import messages
 from django.urls import reverse_lazy
 from django.http import JsonResponse, Http404
+from django.views.decorators.csrf import csrf_exempt
 import json
 from datetime import datetime
 import random
@@ -14,15 +15,13 @@ import cv2
 import numpy as np
 import base64
 from io import BytesIO
-from PIL import Image as PILImage  # ADDED PILImage for Sign Detector
 from PIL import Image
 from .fall_detector import detect_fall_in_frame
 from .fatiguedetector import detect_fatigue_in_frame
 from .spill_detector import detect_spill_in_frame
 from .manhole_detector import detect_manhole_in_frame, estimate_manhole_depth
 from .exit_detector import detect_blocked_exit_in_frame
-from .ppe_detector import detect_ppe_in_frame
-from .sign_detector import detect_sign_in_image  # ADDED SIGN DETECTOR
+from .proximity_detector import detect_proximity_in_frame, ProximityDetector
 
 MODULE_SLUG_MAP = {
     'ppe':        'PPE',
@@ -38,7 +37,6 @@ MODULE_SLUG_MAP = {
     'blocked-exit': 'Hazards',
     'fire':       'Fire',
     'machinery':  'Machinery',
-    'signs':      'Signs',  # ADDED SIGNS
 }
 
 MODULE_PAGE_CONFIG = {
@@ -161,8 +159,6 @@ class ModuleDetailView(TemplateView):
             is_spill = 'spill_detected' in details
             is_manhole = 'manhole_detected' in details
             is_blocked_exit = 'blocked_exit_detected' in details
-            is_ppe_violation = 'ppe_violation' in details
-            is_sign_defect = 'is_defective' in details  # ADDED SIGN
             detected = bool(det.count)
             kind = (
                 'Fatigue' if is_fatigue else
@@ -170,12 +166,10 @@ class ModuleDetailView(TemplateView):
                 'Spill' if is_spill else
                 'Issue Bloquee' if is_blocked_exit else
                 'Manhole' if is_manhole else
-                'PPE Violation' if is_ppe_violation else
-                'Sign Defect' if is_sign_defect else  # ADDED SIGN
                 details.get('class', 'Detection')
             )
             source = details.get('camera') or details.get('source') or (
-                'CAM 2' if is_fatigue else 'CAM 1' if is_fall else 'CAM 3' if is_spill else 'CAM 6' if is_blocked_exit else 'CAM 5' if is_manhole else 'CAM 4' if is_ppe_violation else 'CAM 7' if is_sign_defect else 'Module'  # ADDED SIGN -> CAM 7
+                'CAM 2' if is_fatigue else 'CAM 1' if is_fall else 'CAM 3' if is_spill else 'CAM 6' if is_blocked_exit else 'CAM 5' if is_manhole else 'Module'
             )
             confidence_pct = int(round((det.confidence or 0) * 100))
             rows.append({
@@ -262,27 +256,9 @@ def _detection_to_event(det):
     is_spill = 'spill_detected' in details
     is_manhole = 'manhole_detected' in details
     is_blocked_exit = 'blocked_exit_detected' in details
-    is_ppe_violation = 'ppe_violation' in details
-    is_sign_defect = 'is_defective' in details  # ADDED SIGN
-    event_type = (
-        'fatigue' if is_fatigue else 
-        'fall' if is_fall else 
-        'spill' if is_spill else 
-        'manhole' if is_manhole else 
-        'blocked_exit' if is_blocked_exit else 
-        'ppe_violation' if is_ppe_violation else 
-        'sign_defect' if is_sign_defect else  # ADDED SIGN
-        'detection'
-    )
+    event_type = 'fatigue' if is_fatigue else 'fall' if is_fall else 'spill' if is_spill else 'manhole' if is_manhole else 'blocked_exit' if is_blocked_exit else 'detection'
     cam = details.get('camera') or details.get('source') or (
-        'cam2' if is_fatigue else 
-        'cam1' if is_fall else 
-        'cam3' if is_spill else 
-        'cam5' if is_manhole else 
-        'cam6' if is_blocked_exit else 
-        'cam4' if is_ppe_violation else 
-        'cam7' if is_sign_defect else  # ADDED SIGN -> cam7
-        'module'
+        'cam2' if is_fatigue else 'cam1' if is_fall else 'cam3' if is_spill else 'cam5' if is_manhole else 'cam6' if is_blocked_exit else 'module'
     )
     return {
         'id': det.id,
@@ -582,6 +558,125 @@ def api_fatigue_detection_batch(request):
         return JsonResponse({'status': 'error', 'message': f'Erreur batch fatigue : {e}'}, status=500)
 
 
+# ── /api/proximity-detection/ ─────────────────────────────────────────────────
+
+@csrf_exempt
+def api_proximity_detection(request):
+    """API endpoint pour la détection de proximité homme-machine (image unique)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+
+        if 'image' not in data:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Image requise pour la détection de proximité'}, status=400
+            )
+
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Erreur de décodage image : {e}'}, status=400)
+
+        proximity_detected, confidence, details = detect_proximity_in_frame(frame)
+
+        module = _get_module_by_name('machinery', 'proximity', 'homme-machine')
+        if module:
+            Detection.objects.create(
+                module     = module,
+                confidence = confidence,
+                count      = len(details.get('proximity_alerts', [])),
+                details    = {
+                    'proximity_detected': proximity_detected,
+                    'confidence':         confidence,
+                    'camera':             data.get('camera', 'cam1'),
+                    'proximity_alerts':   details.get('proximity_alerts', []),
+                    'detections':         details.get('detections', []),
+                    'frame_shape':        list(map(int, frame.shape)),
+                    'model_version':      '1.0.0',
+                },
+            )
+
+            if proximity_detected:
+                for alert in details.get('proximity_alerts', []):
+                    Alert.objects.create(
+                        module      = module,
+                        severity    = alert.get('severity', 'warning'),
+                        title       = f'Proximité dangereuse ! ({alert.get("distance", 0):.1f}m)',
+                        description = f'Proximité détectée entre ouvrier et machine à {alert.get("distance", 0):.1f}m',
+                        details     = {
+                            'distance':   alert.get('distance', 0),
+                            'severity':   alert.get('severity', 'warning'),
+                            'worker_id':  alert.get('worker_id'),
+                            'machine_id': alert.get('machine_id'),
+                            'location':   details.get('location', 'Zone principale'),
+                            'camera':     data.get('camera', 'CAM 1'),
+                            'event_type': 'proximity',
+                            'timestamp':  datetime.now().isoformat(),
+                        },
+                    )
+
+        return JsonResponse({
+            'status':             'success',
+            'proximity_detected': bool(proximity_detected),
+            'confidence':         float(confidence),
+            'details':            details,
+            'message':            'Analyse de proximité terminée',
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur lors de la détection de proximité : {e}'}, status=500)
+
+
+@csrf_exempt
+def api_proximity_detection_batch(request):
+    """API endpoint pour traiter plusieurs images en batch (proximité)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+
+        if 'images' not in data or not isinstance(data['images'], list):
+            return JsonResponse({'status': 'error', 'message': "Liste 'images' requise"}, status=400)
+
+        results          = []
+        total_proximities = 0
+
+        for i, image_b64 in enumerate(data['images']):
+            try:
+                frame = _decode_image(image_b64)
+                proximity_detected, confidence, details = detect_proximity_in_frame(frame)
+                proximity_count = len(details.get('proximity_alerts', []))
+                results.append({
+                    'frame_id':          i,
+                    'proximity_detected': bool(proximity_detected),
+                    'confidence':         float(confidence),
+                    'proximity_count':    proximity_count,
+                    'details':            details,
+                })
+                if proximity_detected:
+                    total_proximities += proximity_count
+            except Exception as e:
+                results.append({'frame_id': i, 'error': str(e)})
+
+        return JsonResponse({
+            'status':                    'success',
+            'total_frames':              len(results),
+            'total_proximities_detected': total_proximities,
+            'results':                   results,
+            'message':                   f'Analyse batch terminée : {total_proximities} proximité(s) détectée(s)',
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur batch proximité : {e}'}, status=500)
+
+
 def api_spill_detection(request):
     """API endpoint pour la detection de deversement chimique (segmentation)."""
     if request.method != 'POST':
@@ -861,155 +956,3 @@ def api_blocked_exit_detection(request):
         return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Erreur detection sortie de secours : {e}'}, status=500)
-
-
-# ── /api/ppe-detection/ ──────────────────────────────────────────────────────
-
-def api_ppe_detection(request):
-    """API endpoint pour la détection d'EPI (Equipement de Protection Individuelle)."""
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
-
-    try:
-        data = json.loads(request.body)
-        if 'image' not in data:
-            return JsonResponse({'status': 'error', 'message': 'Image requise pour la détection PPE'}, status=400)
-
-        try:
-            frame = _decode_image(data['image'])
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Erreur de décodage image : {e}'}, status=400)
-
-        camera = data.get('camera', 'cam4')
-        violation_detected, confidence, details = detect_ppe_in_frame(frame, camera=camera)
-
-        module = _get_module_by_name('ppe', 'equipement', 'protection', 'safety')
-        if module:
-            Detection.objects.create(
-                module=module,
-                confidence=confidence,
-                count=1 if violation_detected else 0,
-                details={
-                    'ppe_violation': violation_detected,
-                    'confidence': confidence,
-                    'camera': camera,
-                    'bbox': details.get('bbox'),
-                    'detections': details.get('detections', []),
-                    'has_human': details.get('has_human', False),
-                    'has_helmet': details.get('has_helmet', False),
-                    'has_vest': details.get('has_vest', False),
-                    'has_boots': details.get('has_boots', False),
-                    'frame_shape': list(map(int, frame.shape)),
-                    'model_version': '1.0.0',
-                    'model_available': details.get('model_available', False),
-                },
-            )
-
-            if violation_detected:
-                Alert.objects.create(
-                    module=module,
-                    severity='warning',
-                    title='Violation EPI détectée !',
-                    description=(
-                        f'Travailleur sans EPI complet détecté sur {camera.upper()} '
-                        f'(confiance {confidence:.2%})'
-                    ),
-                    details={
-                        'confidence': confidence,
-                        'camera': camera,
-                        'event_type': 'ppe_violation',
-                        'timestamp': datetime.now().isoformat(),
-                    },
-                )
-
-        return JsonResponse({
-            'status': 'success',
-            'ppe_violation': bool(violation_detected),
-            'confidence': float(confidence),
-            'details': details,
-            'model_available': details.get('model_available', False),
-            'message': 'Analyse PPE terminée',
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'Erreur détection PPE : {e}'}, status=500)
-
-
-# ── /api/sign-detect/ ────────────────────────────────────────────────────────
-
-def api_sign_detect(request):
-    """API endpoint pour la détection de défauts sur les panneaux de signalisation (base64 JSON)."""
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
-
-    try:
-        data = json.loads(request.body)
-        if 'image' not in data:
-            return JsonResponse({'status': 'error', 'message': 'Image requise pour la détection de panneaux'}, status=400)
-
-        try:
-            # Decode base64 to OpenCV frame
-            frame = _decode_image(data['image'])
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Erreur de décodage image : {e}'}, status=400)
-
-        # Convert OpenCV BGR frame to RGB PIL Image for the ResNet model
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        pil_image = PILImage.fromarray(rgb_frame)
-
-        # Run the two-stage detection pipeline
-        result = detect_sign_in_image(pil_image)
-        is_defective = result.get('is_defective', False)
-        confidence = result.get('defect_score', 0.0)
-        camera = data.get('camera', 'cam7') # Default to cam7
-
-        # Database persistence
-        module = _get_module_by_name('signs', 'panneaux', 'signalisation')
-        if module:
-            Detection.objects.create(
-                module=module,
-                confidence=confidence,
-                count=1 if is_defective else 0,
-                details={
-                    'is_defective': is_defective,
-                    'verdict': result.get('verdict'),
-                    'category': result.get('category'),
-                    'category_name': result.get('category_name'),
-                    'defect_score': result.get('defect_score'),
-                    'threshold': result.get('threshold'),
-                    'cat_confidence': result.get('cat_confidence'),
-                    'camera': camera,
-                    'latency_ms': result.get('latency_ms'),
-                },
-            )
-
-            if is_defective:
-                Alert.objects.create(
-                    module=module,
-                    severity='warning',
-                    title=f"Panneau {result.get('category_name', '')} Défectueux !",
-                    description=(
-                        f"Panneau de type {result.get('category', '')} détecté comme défectueux "
-                        f"sur {camera.upper()} (Score: {result.get('defect_score', 0):.2f})"
-                    ),
-                    details={
-                        'confidence': confidence,
-                        'camera': camera,
-                        'event_type': 'sign_defect',
-                        'category': result.get('category'),
-                        'timestamp': datetime.now().isoformat(),
-                    },
-                )
-
-        return JsonResponse({
-            'status': 'success',
-            'data': result,
-            'message': 'Analyse de panneau terminée',
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'Erreur lors de la détection : {e}'}, status=500)

@@ -30,6 +30,7 @@ const LIVE_VIDEO_SRC_CAM4      = '/media/ppe_video.mp4';
 const LIVE_VIDEO_SRC_CAM6      = '/media/exit_emergency.mp4';
 const LIVE_VIDEO_SRC_CAM5      = '/media/hole.mp4';
 const LIVE_VIDEO_SRC_CAM7      = '/media/construction_signs2.mp4';
+const LIVE_VIDEO_SRC_CAM8      = '/media/proximity_test.mp4';
 const VIDEO_CAPTURE_MAX_WIDTH  = 960;
 const VIDEO_CAPTURE_MAX_HEIGHT = 960;
 
@@ -55,6 +56,9 @@ let cam6VideoAnalysisActive    = false;
 let cam7DetectionInterval      = null; // ADDED SIGN
 let cam7VideoAnalysisActive    = false; // ADDED SIGN
 
+let cam8DetectionInterval      = null; // ADDED PROXIMITY
+let cam8VideoAnalysisActive    = false; // ADDED PROXIMITY
+
 let spillRequestInFlight       = {};
 let spillLastAlertAt           = {};
 
@@ -68,6 +72,12 @@ let signRequestInFlight        = false;
 let signLastAlertAt            = 0;
 const SIGN_ANALYSIS_INTERVAL_MS = 800; // ResNet can be a bit heavier
 const SIGN_ALERT_COOLDOWN_MS    = 10000;
+
+// Proximity State Variables
+let proximityRequestInFlight        = false;
+let proximityLastAlertAt            = 0;
+const PROXIMITY_ANALYSIS_INTERVAL_MS = 1000;
+const PROXIMITY_ALERT_COOLDOWN_MS    = 10000;
 
 let manholeRequestInFlight     = false;
 let manholeLastAlertAt         = 0;
@@ -132,7 +142,7 @@ function clearOverlayCanvas(canvasId) {
 }
 
 function clearAllOverlayCanvases() {
-  ['cam1','cam2','cam3','cam4','cam5','cam6','cam7'].forEach(id => // Added cam7
+  ['cam1','cam2','cam3','cam4','cam5','cam6','cam7','cam8'].forEach(id => // Added cam7, cam8
     clearOverlayCanvas(`${id}-overlay-canvas`)
   );
 }
@@ -1205,6 +1215,167 @@ function stopCam7Detection() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CAM 8 — PROXIMITY DETECTION
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function updateCam8Status(text) {
+  const el = document.getElementById('cam8-proximity-status');
+  if (el) el.textContent = 'Détection: ' + text;
+}
+
+function drawProximityOverlay(canvasId, details, video, proximity_detected) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !video) return;
+  setCanvasSize(canvas, video);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const rect = getContainedVideoRect(canvas, video);
+
+  // Draw bounding boxes for workers (green) and machines (orange)
+  if (details && details.detections) {
+    for (const det of details.detections) {
+      const [x1, y1, x2, y2] = det.bbox;
+      const rx = rect.x + x1 * rect.scaleX;
+      const ry = rect.y + y1 * rect.scaleY;
+      const rw = (x2 - x1) * rect.scaleX;
+      const rh = (y2 - y1) * rect.scaleY;
+      let color = 'rgba(74,227,181,0.8)'; // green for worker
+      if (det.label.toLowerCase().includes('machine')) {
+        color = 'rgba(255,107,0,0.8)'; // orange for machine
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.fillStyle = color;
+      ctx.font = 'bold 10px monospace';
+      const label = det.label;
+      const tw = ctx.measureText(label).width;
+      ctx.fillRect(rx, ry - 16, tw + 6, 16);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, rx + 3, ry - 3);
+    }
+  }
+
+  // Draw proximity zones if proximity_alerts
+  if (details && details.proximity_alerts) {
+    for (const alert of details.proximity_alerts) {
+      const worker_center_x = (alert.worker_bbox[0] + alert.worker_bbox[2]) / 2;
+      const worker_center_y = (alert.worker_bbox[1] + alert.worker_bbox[3]) / 2;
+      const rx = rect.x + worker_center_x * rect.scaleX;
+      const ry = rect.y + worker_center_y * rect.scaleY;
+      const radius = alert.distance * 50; // scale for display
+      let color = 'rgba(0,194,255,0.5)'; // blue for vigilance
+      if (alert.severity === 'critical') color = 'rgba(255,59,47,0.5)'; // red
+      else if (alert.severity === 'warning') color = 'rgba(255,184,0,0.5)'; // yellow
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(rx, ry, radius, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+  }
+}
+
+async function analyzeProximityFrame(video, cameraId) {
+  if (!video || video.paused || video.ended) return;
+  const imageData = captureVideoFrame(video);
+  const updateStatus = updateCam8Status;
+  const canvasId = 'cam8-overlay-canvas';
+
+  if (!imageData) {
+    updateStatus('Capture impossible');
+    proximityRequestInFlight = false;
+    return;
+  }
+  updateStatus('Analyse en cours...');
+
+  try {
+    const res = await fetch('/api/proximity-detection/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({ image: imageData, camera: cameraId }),
+    });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      const proximity_detected = data.proximity_detected;
+      const confidence = data.confidence;
+      const details = data.details;
+      const alerts = details.proximity_alerts || [];
+      const workers_count = details.workers_count || 0;
+      const machines_count = details.machines_count || 0;
+
+      let status_text = `OK (${workers_count}W ${machines_count}M)`;
+      if (alerts.length > 0) {
+        const min_distance = Math.min(...alerts.map(a => a.distance));
+        const severity = alerts[0].severity;
+        let severity_fr = severity === 'critical' ? 'CRITIQUE' : severity === 'warning' ? 'ALERTE' : 'VIGILANCE';
+        status_text = `${severity_fr} ${min_distance.toFixed(1)}m (${workers_count}W ${machines_count}M)`;
+      }
+      updateStatus(status_text);
+
+      if (details.detections) {
+        drawProximityOverlay(canvasId, details, video, proximity_detected);
+      } else {
+        clearOverlayCanvas(canvasId);
+      }
+
+      const now = Date.now();
+      const canAlert = now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS;
+      if (proximity_detected && canAlert) {
+        proximityLastAlertAt = now;
+        const severity = alerts[0].severity;
+        const min_dist = Math.min(...alerts.map(a => a.distance));
+        addAlert(severity === 'critical' ? 'critical' : 'warning', 'Proximity', `Proximité dangereuse détectée (${min_dist.toFixed(1)}m)`);
+        showPopupNotification(`[${cameraId.toUpperCase()}] Proximité dangereuse (${min_dist.toFixed(1)}m)`, severity === 'critical' ? 'critical' : 'warning');
+      }
+
+      _notifyDetection({
+        cam: cameraId, type: 'proximity',
+        detected: proximity_detected, confidence: confidence, details: details,
+      });
+    } else {
+      updateStatus('Erreur API');
+      clearOverlayCanvas(canvasId);
+    }
+  } catch (err) {
+    updateStatus('Erreur détection');
+    console.error(`[SafeVision] fetch ${cameraId} proximity:`, err);
+  } finally {
+    proximityRequestInFlight = false;
+  }
+}
+
+function analyzeCam8Frame(video) { return analyzeProximityFrame(video, 'cam8'); }
+
+function startCam8Detection(video) {
+  if (!video || cam8DetectionInterval) return;
+  analyzeCam8Frame(video);
+  cam8DetectionInterval = setInterval(() => analyzeCam8Frame(video), PROXIMITY_ANALYSIS_INTERVAL_MS);
+  cam8VideoAnalysisActive = true;
+  updateCam8Status('Analyse active');
+}
+
+function stopCam8Detection() {
+  if (cam8DetectionInterval) { clearInterval(cam8DetectionInterval); cam8DetectionInterval = null; }
+  cam8VideoAnalysisActive = false;
+  clearOverlayCanvas('cam8-overlay-canvas');
+  updateCam8Status('Analyse arrêtée');
+}
+
+function loadCam8Video(file) {
+  const v = document.getElementById('cam8-video');
+  if (!v || !file) return;
+  const url = URL.createObjectURL(file);
+  v.src = url;
+  v.load();
+  v.play().catch(() => {});
+  document.getElementById('cam-feed-8').style.display = 'none';
+  document.getElementById('cam8-video-overlay').querySelector('span').textContent = `Fichier: ${file.name}`;
+  if (!cam8VideoAnalysisActive) startCam8Detection(v);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // UPLOAD VIDÉO
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1329,6 +1500,7 @@ function startCameras() {
   _startCamWithLoop('cam5-video', LIVE_VIDEO_SRC_CAM5, startCam5Detection);
   _startCamWithLoop('cam6-video', LIVE_VIDEO_SRC_CAM6, startCam6Detection);
   _startCamWithLoop('cam7-video', LIVE_VIDEO_SRC_CAM7, startCam7Detection); // ADDED CAM 7
+  // _startCamWithLoop('cam8-video', LIVE_VIDEO_SRC_CAM8, startCam8Detection); // ADDED CAM 8 - disabled by default, use upload
 }
 
 function stopCameras() {
@@ -1349,6 +1521,7 @@ function stopCameras() {
     ['cam5-video', updateCam5Status, stopCam5Detection],
     ['cam6-video', updateCam6Status, stopCam6Detection],
     ['cam7-video', updateCam7Status, stopCam7Detection], // ADDED CAM 7
+    ['cam8-video', updateCam8Status, stopCam8Detection], // ADDED CAM 8
   ].forEach(([id, statusFn, stopFn]) => {
     const v = document.getElementById(id);
     if (v) {

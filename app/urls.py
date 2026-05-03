@@ -21,8 +21,8 @@ from .views import (
     api_manhole_detection,
     api_manhole_depth,
     api_blocked_exit_detection,
-    api_ppe_detection,
-    api_sign_detect,  # ADDED SIGN DETECTOR
+    api_proximity_detection,  # ADDED PROXIMITY DETECTOR
+    api_proximity_detection_batch,  # ADDED PROXIMITY DETECTOR
 )
 
 app_name = 'app'
@@ -61,9 +61,7 @@ urlpatterns = [
     path('api/manhole-depth/', api_manhole_depth, name='api_manhole_depth'),
     path('api/blocked-exit-detection/', api_blocked_exit_detection, name='api_blocked_exit_detection'),
     
-    # ── API — Détection d'EPI (PPE) ───────────────────────
-    path('api/ppe-detection/', api_ppe_detection, name='api_ppe_detection'),
-    
-    # ── API — Détection de Panneaux (Signs) ────────────────
-    path('api/sign-detect/', api_sign_detect, name='api_sign_detect'),  # ADDED SIGN DETECTOR
+    # ── API — Détection de Proximité ───────────────────────
+    path('api/proximity-detection/', api_proximity_detection, name='api_proximity_detection'),  # ADDED PROXIMITY DETECTOR
+    path('api/proximity-detection/batch/', api_proximity_detection_batch, name='api_proximity_detection_batch'),  # ADDED PROXIMITY DETECTOR
 ]
