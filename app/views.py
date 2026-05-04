@@ -32,21 +32,6 @@ from .panic_detector import detect_panic_in_frame
 from .worker_tracking_detector import detect_worker_tracking_in_frame
 
 MODULE_SLUG_MAP = {
-<<<<<<< HEAD
-    'ppe':        'PPE',
-    'posture':    'Posture',
-    'fatigue':    'Fatigue',
-    'incapacity': 'Fatigue',
-    'falling':    'Fatigue',
-    'fall':       'Fatigue',
-    'tracking':   'Tracking',
-    'hazards':    'Hazards',
-    'spill':      'Hazards',
-    'manhole':    'Hazards',
-    'blocked-exit': 'Hazards',
-    'fire':       'Fire',
-    'machinery':  'Machinery',
-=======
     'ppe': {
         'id': 1,
         'keywords': ('epi', 'ppe', 'signalisation', 'conformite'),
@@ -111,7 +96,6 @@ MODULE_SLUG_MAP = {
         'color': '#E040FB',
     },
     'proximity': {'alias': 'machinery'},
->>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
 }
 
 MODULE_PAGE_CONFIG = {
@@ -755,7 +739,6 @@ class ReportsView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-<<<<<<< HEAD
         modules = list(Module.objects.order_by('id'))
         detections = Detection.objects.select_related('module').order_by('-timestamp')
         alerts = Alert.objects.select_related('module').order_by('-timestamp')
@@ -849,18 +832,6 @@ class ReportsView(TemplateView):
                 'risk_focus': top_module['short_name'] if top_module else 'N/A',
             },
         })
-=======
-        modules = Module.objects.all()
-        alerts = Alert.objects.order_by('-timestamp')[:10]
-        context['app_name'] = 'Rapports SafeVision'
-        context['modules'] = modules
-        context['alerts'] = alerts
-        context['total_modules'] = modules.count()
-        context['total_alerts'] = Alert.objects.count()
-        context['critical_alerts'] = Alert.objects.filter(severity='critical').count()
-        context['total_detections'] = Detection.objects.count()
-        context['latest_alerts'] = alerts
->>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
         return context
 
 
@@ -1701,21 +1672,11 @@ def api_proximity_detection(request):
                 count      = len(incidents),
                 details    = {
                     'proximity_detected': proximity_detected,
-<<<<<<< HEAD
-                    'confidence':         confidence,
-                    'camera':             data.get('camera', 'cam1'),
-                    'proximity_alerts':   details.get('proximity_alerts', []),
-                    'detections':         details.get('detections', []),
-                    'frame_shape':        list(map(int, frame.shape)),
-                    'model_version':      '1.0.0',
-                    **capture_meta,
-=======
                     'confidence'        : confidence,
                     'camera'            : data.get('camera', 'cam8'),
                     'workers_count'     : details.get('workers_count', 0),
                     'machines_count'    : details.get('machines_count', 0),
                     'incidents'         : len(incidents),
->>>>>>> rakia
                 },
             )
             if proximity_detected and incidents:
@@ -1735,27 +1696,6 @@ def api_proximity_detection(request):
                     },
                 )
 
-<<<<<<< HEAD
-            if proximity_detected:
-                for alert in details.get('proximity_alerts', []):
-                    Alert.objects.create(
-                        module      = module,
-                        severity    = alert.get('severity', 'warning'),
-                        title       = f'Proximité dangereuse ! ({alert.get("distance", 0):.1f}m)',
-                        description = f'Proximité détectée entre ouvrier et machine à {alert.get("distance", 0):.1f}m',
-                        details     = {
-                            'distance':   alert.get('distance', 0),
-                            'severity':   alert.get('severity', 'warning'),
-                            'worker_id':  alert.get('worker_id'),
-                            'machine_id': alert.get('machine_id'),
-                            'location':   details.get('location', 'Zone principale'),
-                            'camera':     data.get('camera', 'CAM 1'),
-                            'event_type': 'proximity',
-                            'timestamp':  datetime.now().isoformat(),
-                            **capture_meta,
-                        },
-                    )
-=======
         # ── Sévérité maximale ─────────────────────────────────────────────────
         order = ['safe', 'vigilance', 'alert', 'critical']
         top   = max(
@@ -1763,7 +1703,6 @@ def api_proximity_detection(request):
             key=lambda s: order.index(s) if s in order else 0,
             default='safe'
         )
->>>>>>> rakia
 
         return JsonResponse({
             'status'            : 'success',
