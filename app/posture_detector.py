@@ -39,6 +39,80 @@ JOINT_COLORS = [
 ]
 
 
+def _geometric_posture_check(kpts_xy, kpts_conf):
+    """Simple geometric rules for unsafe posture detection."""
+    reasons = []
+    confidence = 0.0
+
+    # Keypoints indices (COCO-17):
+    # 0:nose, 1:eye_l, 2:eye_r, 3:ear_l, 4:ear_r, 5:shoulder_l, 6:shoulder_r,
+    # 7:elbow_l, 8:elbow_r, 9:wrist_l, 10:wrist_r, 11:hip_l, 12:hip_r,
+    # 13:knee_l, 14:knee_r, 15:ankle_l, 16:ankle_r
+
+    def get_point(idx):
+        if idx >= len(kpts_xy) or (kpts_conf is not None and kpts_conf[idx] < 0.3):
+            return None
+        return kpts_xy[idx]
+
+    # Check if person is visible
+    shoulder_l = get_point(5)
+    shoulder_r = get_point(6)
+    hip_l = get_point(11)
+    hip_r = get_point(12)
+    knee_l = get_point(13)
+    knee_r = get_point(14)
+    ankle_l = get_point(15)
+    ankle_r = get_point(16)
+
+    if not all([shoulder_l, shoulder_r, hip_l, hip_r]):
+        return False, 0.0, reasons  # Not enough keypoints
+
+    # Calculate distances
+    def dist(p1, p2):
+        return np.linalg.norm(np.array(p1) - np.array(p2))
+
+    # Shoulder width
+    shoulder_width = dist(shoulder_l, shoulder_r)
+
+    # Hip width
+    hip_width = dist(hip_l, hip_r)
+
+    # Check if knees are bent (distance from hip to knee vs knee to ankle)
+    knee_bent = False
+    if knee_l and ankle_l:
+        thigh_len = dist(hip_l, knee_l)
+        calf_len = dist(knee_l, ankle_l)
+        if calf_len < thigh_len * 0.8:  # Bent knee
+            knee_bent = True
+            reasons.append("genou gauche plié")
+            confidence = max(confidence, 0.7)
+
+    if knee_r and ankle_r:
+        thigh_len = dist(hip_r, knee_r)
+        calf_len = dist(knee_r, ankle_r)
+        if calf_len < thigh_len * 0.8:
+            knee_bent = True
+            reasons.append("genou droit plié")
+            confidence = max(confidence, 0.7)
+
+    # Check if back is not straight (shoulders and hips alignment)
+    shoulder_center = ((shoulder_l[0] + shoulder_r[0])/2, (shoulder_l[1] + shoulder_r[1])/2)
+    hip_center = ((hip_l[0] + hip_r[0])/2, (hip_l[1] + hip_r[1])/2)
+
+    # Vertical alignment
+    shoulder_hip_dist = dist(shoulder_center, hip_center)
+    if shoulder_hip_dist > shoulder_width * 0.5:  # Leaning
+        reasons.append("dos courbé")
+        confidence = max(confidence, 0.6)
+
+    # If any unsafe condition
+    unsafe = len(reasons) > 0
+    if unsafe and confidence == 0.0:
+        confidence = 0.5
+
+    return unsafe, confidence, reasons
+
+
 def _load_models():
     global _posture_model, _pose_model
     if _posture_model is None and POSTURE_MODEL_PATH.exists():
@@ -117,22 +191,39 @@ def detect_posture_in_frame(frame, camera='cam9'):
                             if res.keypoints.conf is not None else None)
 
                 skel_img = _skeleton_on_black(kps_xy, kps_conf, w, h)
-
+                # Use geometric rules as primary detection
+                geom_unsafe, geom_conf, geom_reasons = _geometric_posture_check(kps_xy, kpts_conf)
                 cls_id, cls_conf = 0, 0.50
+                predictions = []
                 if _posture_model is not None:
-                    pres = _posture_model(skel_img, conf=0.20, verbose=False)
+                    pres = _posture_model(skel_img, conf=0.01, verbose=False)  # Lower threshold
                     for pr in pres:
                         if pr.boxes and len(pr.boxes) > 0:
-                            best     = max(pr.boxes, key=lambda b: float(b.conf))
-                            cls_id   = int(best.cls)
+                            for box in pr.boxes:
+                                cls_id_box = int(box.cls)
+                                conf_box = float(box.conf)
+                                predictions.append({'class_id': cls_id_box, 'confidence': conf_box})
+                            best = max(pr.boxes, key=lambda b: float(b.conf))
+                            cls_id = int(best.cls)
                             cls_conf = float(best.conf)
                             break
+                else:
+                    predictions = [{'error': 'model not loaded'}]
+
+                # Use geometric if model doesn't detect unsafe, or combine
+                final_unsafe = geom_unsafe or (cls_id == 1)
+                final_conf = max(geom_conf, cls_conf) if final_unsafe else cls_conf
+                final_reasons = geom_reasons + (['model_prediction'] if cls_id == 1 else [])
 
                 persons.append({
                     'bbox':               bbox,
-                    'class':              'unsafe' if cls_id == 1 else 'safe',
-                    'class_id':           cls_id,
-                    'confidence':         cls_conf,
+                    'class':              'unsafe' if final_unsafe else 'safe',
+                    'class_id':           1 if final_unsafe else 0,
+                    'confidence':         final_conf,
+                    'predictions':        predictions,
+                    'geometric_unsafe':   geom_unsafe,
+                    'geometric_conf':     geom_conf,
+                    'geometric_reasons':  geom_reasons,
                     'skeleton_keypoints': kps_xy.tolist(),
                     'keypoints_conf':     kps_conf.tolist() if kps_conf is not None else [],
                 })
@@ -151,6 +242,11 @@ def detect_posture_in_frame(frame, camera='cam9'):
         details['bbox']               = target['bbox']
         details['skeleton_keypoints'] = target['skeleton_keypoints']
         details['keypoints_conf']     = target.get('keypoints_conf', [])
+        details['classified_as']      = target['class']
+        details['classification_conf'] = target['confidence']
+        details['unsafe_count']       = len(unsafe_persons)
+        details['total_persons']      = len(persons)
+        details['reasons']            = target.get('geometric_reasons', [])
 
         if unsafe_persons:
             return True, target['confidence'], details

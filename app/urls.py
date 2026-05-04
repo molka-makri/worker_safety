@@ -67,7 +67,7 @@ urlpatterns = [
     path('api/manhole-detection/', api_manhole_detection, name='api_manhole_detection'),
     path('api/manhole-depth/', api_manhole_depth, name='api_manhole_depth'),
     path('api/blocked-exit-detection/', api_blocked_exit_detection, name='api_blocked_exit_detection'),
-    
+
     # ── API — Détection de Proximité ───────────────────────
     path('api/proximity-detection/', api_proximity_detection, name='api_proximity_detection'),
     path('api/proximity-detection/batch/', api_proximity_detection_batch, name='api_proximity_detection_batch'),
