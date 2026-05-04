@@ -36,7 +36,7 @@ const LIVE_VIDEO_SRC_CAM6 = "/media/exit_emergency.mp4";
 const LIVE_VIDEO_SRC_CAM5 = "/media/hole.mp4";
 const LIVE_VIDEO_SRC_CAM7 = "/media/construction_signs2.mp4";
 const LIVE_VIDEO_SRC_CAM8 = "/media/tracking_workers.mp4";
-const LIVE_VIDEO_SRC_CAM8_PROXIMITY = "/media/proximity_test.mp4";
+const LIVE_VIDEO_SRC_CAM8_PROXIMITY = "/media/Media_Proximity/vid3.mp4";
 const LIVE_VIDEO_SRC_CAM9 = "/media/posture.mp4";
 const LIVE_VIDEO_SRC_CAM10 = "/media/panic.mp4";
 const VIDEO_CAPTURE_MAX_WIDTH = 960;
@@ -1742,74 +1742,105 @@ function drawProximityOverlay(canvasId, details, video, proximity_detected) {
     }
   }
 }
-
 async function analyzeProximityFrame(video, cameraId) {
   if (!video || video.paused || video.ended) return;
   if (proximityRequestInFlight) return;
   proximityRequestInFlight = true;
-  const imageData = captureVideoFrame(video);
-  const updateStatus = updateCam8ProximityStatus;
-  const canvasId = 'cam8-overlay-canvas';
 
+  const imageData = captureVideoFrame(video);
   if (!imageData) {
-    updateStatus('Capture impossible');
+    updateCam8Status('Capture impossible');
     proximityRequestInFlight = false;
     return;
   }
-  updateStatus('Analyse en cours...');
+  updateCam8Status('Analyse en cours…');
 
   try {
     const res = await fetch('/api/proximity-detection/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      method : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken'  : getCookie('csrftoken'),
+      },
       body: JSON.stringify({ image: imageData, camera: cameraId }),
     });
     const data = await res.json();
 
     if (data.status === 'success') {
-      const proximity_detected = data.proximity_detected;
-      const confidence = data.confidence;
-      const details = data.details;
-      const alerts = details.proximity_alerts || [];
-      const workers_count = details.workers_count || 0;
-      const machines_count = details.machines_count || 0;
+      const det  = data.details || {};
+      const nW   = det.workers_count   || 0;
+      const nM   = det.machines_count  || 0;
+      const sev  = det.severity        || 'safe';
+      const inc  = det.incident_logs   || [];
 
-      let status_text = `OK (${workers_count}W ${machines_count}M)`;
-      if (alerts.length > 0) {
-        const min_distance = Math.min(...alerts.map(a => a.distance));
-        const severity = alerts[0].severity;
-        let severity_fr = severity === 'critical' ? 'CRITIQUE' : severity === 'warning' ? 'ALERTE' : 'VIGILANCE';
-        status_text = `${severity_fr} ${min_distance.toFixed(1)}m (${workers_count}W ${machines_count}M)`;
+      // ── Statut texte ──────────────────────────────────────────
+      let statusTxt = `OK (${nW}W ${nM}M)`;
+      if (inc.length > 0) {
+        const minDist = Math.min(...inc.map(i => i.distance_m || 99));
+        const labels  = { critical:'CRITIQUE', alert:'ALERTE',
+                          vigilance:'VIGILANCE' };
+        statusTxt = `${labels[sev]||'OK'} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
       }
-      updateStatus(status_text);
+      updateCam8Status(statusTxt);
 
-      if (details.detections) {
-        drawProximityOverlay(canvasId, details, video, proximity_detected);
+      // ── Image annotée (générée côté serveur) ──────────────────
+      if (data.annotated_image) {
+        const canvas = document.getElementById('cam8-overlay-canvas');
+        if (canvas) {
+          // Forcer le canvas exactement sur la vidéo
+          canvas.style.position = 'absolute';
+          canvas.style.top      = '0';
+          canvas.style.left     = '0';
+          canvas.style.width    = '100%';
+          canvas.style.height   = '100%';
+          canvas.style.zIndex   = '10';
+          canvas.style.pointerEvents = 'none';
+
+          canvas.width  = video.videoWidth  || video.clientWidth  || 640;
+          canvas.height = video.videoHeight || video.clientHeight || 360;
+
+          const img    = new Image();
+          img.onload   = () => {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          };
+          img.onerror  = () => console.warn('[CAM8] Image annotée non chargée');
+          img.src      = data.annotated_image;
+        }
       } else {
-        clearOverlayCanvas(canvasId);
+        clearOverlayCanvas('cam8-overlay-canvas');
       }
 
-      const now = Date.now();
+      // ── Alerte popup + feed ───────────────────────────────────
+      const now      = Date.now();
       const canAlert = now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS;
-      if (proximity_detected && canAlert) {
+      if (data.proximity_detected && canAlert && inc.length > 0) {
         proximityLastAlertAt = now;
-        const severity = alerts[0].severity;
-        const min_dist = Math.min(...alerts.map(a => a.distance));
-        addAlert(severity === 'critical' ? 'critical' : 'warning', 'Proximity', `Proximité dangereuse détectée (${min_dist.toFixed(1)}m)`);
-        showPopupNotification(`[${cameraId.toUpperCase()}] Proximité dangereuse (${min_dist.toFixed(1)}m)`, severity === 'critical' ? 'critical' : 'warning');
+        const minDist = Math.min(...inc.map(i => i.distance_m || 99));
+        const lvl     = sev === 'critical' ? 'critical' : 'warning';
+        addAlert(lvl, 'Proximité',
+          `Proximité dangereuse détectée (${minDist.toFixed(1)}m)`);
+        showPopupNotification(
+          `[CAM8] Proximité dangereuse (${minDist.toFixed(1)}m)`, lvl);
       }
 
       _notifyDetection({
-        cam: cameraId, type: 'proximity',
-        detected: proximity_detected, confidence: confidence, details: details,
+        cam       : cameraId,
+        type      : 'proximity',
+        detected  : data.proximity_detected,
+        confidence: data.confidence,
+        details   : data.details,
       });
+
     } else {
-      updateStatus('Erreur API');
-      clearOverlayCanvas(canvasId);
+      updateCam8Status('Erreur API');
+      clearOverlayCanvas('cam8-overlay-canvas');
     }
+
   } catch (err) {
-    updateStatus('Erreur détection');
-    console.error(`[SafeVision] fetch ${cameraId} proximity:`, err);
+    updateCam8Status('Erreur détection');
+    console.error('[SafeVision] CAM8 proximity:', err);
   } finally {
     proximityRequestInFlight = false;
   }
@@ -1836,6 +1867,127 @@ function stopCam8ProximityDetection() {
   cam8ProximityVideoAnalysisActive = false;
   clearOverlayCanvas('cam8-overlay-canvas');
   updateCam8ProximityStatus('Analyse arrêtée');
+}
+
+// CAM 11 — PROXIMITY DETECTION (copie exacte de CAM 8)
+let cam11DetectionInterval      = null; // ADDED PROXIMITY
+let cam11VideoAnalysisActive    = false; // ADDED PROXIMITY
+
+function updateCam11Status(text) {
+  const el = document.getElementById('cam11-proximity-status');
+  if (el) el.textContent = 'Détection: ' + text;
+}
+
+async function analyzeCam11Frame(video, options = {}) {
+  if (!video || video.paused || video.ended || !cam11VideoAnalysisActive) return;
+  if (proximityRequestInFlight) return;
+  proximityRequestInFlight = true;
+
+  const imageData = captureVideoFrame(video);
+  const canvasId = 'cam11-overlay-canvas';
+
+  if (!imageData) {
+    updateCam11Status('Capture impossible');
+    proximityRequestInFlight = false;
+    return;
+  }
+  updateCam11Status('Analyse en cours…');
+
+  try {
+    const res = await fetch('/api/proximity-detection/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ image: imageData, camera: 'cam11' }),
+    });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      const result = data.data || {};
+      const proximity_detected = result.proximity_detected || false;
+      const minDist = result.min_distance || 0;
+
+      updateCam11Status(
+        proximity_detected
+          ? `Proximité dangereuse (${minDist.toFixed(1)}m)`
+          : `Sécurisé (${minDist.toFixed(1)}m)`,
+      );
+
+      // Draw proximity overlay
+      const canvas = document.getElementById(canvasId);
+      if (canvas && result.annotated_image) {
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+        };
+        img.src = 'data:image/jpeg;base64,' + result.annotated_image;
+      }
+
+      const now = Date.now();
+      const canAlert = now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS;
+      if (proximity_detected && canAlert) {
+        proximityLastAlertAt = now;
+        addAlert(
+          'danger',
+          'Proximité',
+          `Proximité dangereuse détectée sur CAM 11`,
+        );
+        showPopupNotification(
+          `[CAM 11] Proximité dangereuse (${minDist.toFixed(1)}m)`,
+          'danger',
+        );
+      }
+    } else {
+      updateCam11Status('Erreur API');
+      clearOverlayCanvas(canvasId);
+    }
+  } catch (err) {
+    updateCam11Status('Erreur détection');
+    console.error('[SafeVision] CAM11 proximity:', err);
+  } finally {
+    proximityRequestInFlight = false;
+  }
+}
+
+function analyzeCam11ProximityFrame(video) { return analyzeCam11Frame(video, 'cam11'); }
+
+function startCam11Detection(video) {
+  if (!video || cam11DetectionInterval) return;
+  analyzeCam11ProximityFrame(video);
+  cam11DetectionInterval = setInterval(
+    () => analyzeCam11ProximityFrame(video),
+    PROXIMITY_ANALYSIS_INTERVAL_MS,
+  );
+  cam11VideoAnalysisActive = true;
+  updateCam11Status('Analyse active');
+}
+
+function stopCam11Detection() {
+  if (cam11DetectionInterval) {
+    clearInterval(cam11DetectionInterval);
+    cam11DetectionInterval = null;
+  }
+  cam11VideoAnalysisActive = false;
+  clearOverlayCanvas('cam11-overlay-canvas');
+  updateCam11Status('Analyse arrêtée');
+}
+
+function loadCam11Video(file) {
+  const v = document.getElementById('cam11-video');
+  if (!v || !file) return;
+  const url = URL.createObjectURL(file);
+  v.src = url;
+  v.load();
+  v.play().catch(() => {});
+  document.getElementById('cam-feed-11').style.display = 'none';
+  document.getElementById('cam11-video-overlay').querySelector('span').textContent = `Fichier: ${file.name}`;
+  if (!cam11VideoAnalysisActive) startCam11Detection(v);
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2331,6 +2483,7 @@ function startCameras() {
   _startCamWithLoop("cam8-video", LIVE_VIDEO_SRC_CAM8, startCam8Detection);
   _startCamWithLoop("cam9-video", LIVE_VIDEO_SRC_CAM9, startCam9Detection);
   _startCamWithLoop("cam10-video", LIVE_VIDEO_SRC_CAM10, startCam10Detection);
+  _startCamWithLoop("cam11-video", LIVE_VIDEO_SRC_CAM8_PROXIMITY, startCam11Detection);
 }
 
 function stopCameras() {
@@ -2360,6 +2513,7 @@ function stopCameras() {
     ["cam8-video", updateCam8Status, stopCam8Detection],
     ["cam9-video", updateCam9Status, stopCam9Detection],
     ["cam10-video", updateCam10Status, stopCam10Detection],
+    ["cam11-video", updateCam11Status, stopCam11Detection],
   ].forEach(([id, statusFn, stopFn]) => {
     const v = document.getElementById(id);
     if (v) {
