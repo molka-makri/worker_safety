@@ -30,7 +30,7 @@ const LIVE_VIDEO_SRC_CAM4      = '/media/ppe_video.mp4';
 const LIVE_VIDEO_SRC_CAM6      = '/media/exit_emergency.mp4';
 const LIVE_VIDEO_SRC_CAM5      = '/media/hole.mp4';
 const LIVE_VIDEO_SRC_CAM7      = '/media/construction_signs2.mp4';
-const LIVE_VIDEO_SRC_CAM8      = '/media/proximity_test.mp4';
+const LIVE_VIDEO_SRC_CAM8      = '/media/Media_Proximity/vid3.mp4';
 const VIDEO_CAPTURE_MAX_WIDTH  = 960;
 const VIDEO_CAPTURE_MAX_HEIGHT = 960;
 
@@ -1300,44 +1300,52 @@ async function analyzeProximityFrame(video, cameraId) {
     const data = await res.json();
 
     if (data.status === 'success') {
-      const det     = data.details || {};
-      const nW      = det.workers_count   || 0;
-      const nM      = det.machines_count  || 0;
-      const sev     = det.severity        || 'safe';
-      const nInc    = det.incidents_count || 0;
-      const inc     = det.incident_logs   || [];
+      const det  = data.details || {};
+      const nW   = det.workers_count   || 0;
+      const nM   = det.machines_count  || 0;
+      const sev  = det.severity        || 'safe';
+      const inc  = det.incident_logs   || [];
 
-      // ── Statut texte ────────────────────────────────────────────
+      // ── Statut texte ──────────────────────────────────────────
       let statusTxt = `OK (${nW}W ${nM}M)`;
       if (inc.length > 0) {
         const minDist = Math.min(...inc.map(i => i.distance_m || 99));
         const labels  = { critical:'CRITIQUE', alert:'ALERTE',
                           vigilance:'VIGILANCE' };
-        const lbl     = labels[sev] || 'OK';
-        statusTxt     = `${lbl} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
+        statusTxt = `${labels[sev]||'OK'} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
       }
       updateCam8Status(statusTxt);
 
-      // ── Afficher l'image annotée côté serveur ───────────────────
-      // On remplace le contenu du canvas par l'image annotée
+      // ── Image annotée (générée côté serveur) ──────────────────
       if (data.annotated_image) {
         const canvas = document.getElementById('cam8-overlay-canvas');
         if (canvas) {
-          setCanvasSize(canvas, video);
-          const img  = new Image();
-          img.onload = () => {
+          // Forcer le canvas exactement sur la vidéo
+          canvas.style.position = 'absolute';
+          canvas.style.top      = '0';
+          canvas.style.left     = '0';
+          canvas.style.width    = '100%';
+          canvas.style.height   = '100%';
+          canvas.style.zIndex   = '10';
+          canvas.style.pointerEvents = 'none';
+
+          canvas.width  = video.videoWidth  || video.clientWidth  || 640;
+          canvas.height = video.videoHeight || video.clientHeight || 360;
+
+          const img    = new Image();
+          img.onload   = () => {
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Dessiner l'image annotée en couvrant tout le canvas
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           };
-          img.src = data.annotated_image;
+          img.onerror  = () => console.warn('[CAM8] Image annotée non chargée');
+          img.src      = data.annotated_image;
         }
       } else {
         clearOverlayCanvas('cam8-overlay-canvas');
       }
 
-      // ── Alerte ──────────────────────────────────────────────────
+      // ── Alerte popup + feed ───────────────────────────────────
       const now      = Date.now();
       const canAlert = now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS;
       if (data.proximity_detected && canAlert && inc.length > 0) {
@@ -1351,10 +1359,11 @@ async function analyzeProximityFrame(video, cameraId) {
       }
 
       _notifyDetection({
-        cam: cameraId, type: 'proximity',
-        detected   : data.proximity_detected,
-        confidence : data.confidence,
-        details    : data.details,
+        cam       : cameraId,
+        type      : 'proximity',
+        detected  : data.proximity_detected,
+        confidence: data.confidence,
+        details   : data.details,
       });
 
     } else {
@@ -1497,6 +1506,15 @@ function _startCamWithLoop(id, src, startFn) {
   v.load();
   v.onloadeddata = () => {
     if (!camerasRunning || v.dataset.shouldRun !== '1') return;
+    if (id === 'cam8-video') {
+      const placeholder = document.getElementById('cam-feed-8');
+      if (placeholder) placeholder.style.display = 'none';
+      const overlay = document.getElementById('cam8-video-overlay');
+      if (overlay) {
+        const label = overlay.querySelector('span');
+        if (label) label.textContent = 'Fichier: vid3.mp4';
+      }
+    }
     v.play().catch(err => console.error(`[SafeVision] ${id} play:`, err));
     startFn(v);
     v.onloadeddata = null;
@@ -1524,7 +1542,7 @@ function startCameras() {
   _startCamWithLoop('cam5-video', LIVE_VIDEO_SRC_CAM5, startCam5Detection);
   _startCamWithLoop('cam6-video', LIVE_VIDEO_SRC_CAM6, startCam6Detection);
   _startCamWithLoop('cam7-video', LIVE_VIDEO_SRC_CAM7, startCam7Detection); // ADDED CAM 7
-  // _startCamWithLoop('cam8-video', LIVE_VIDEO_SRC_CAM8, startCam8Detection); // ADDED CAM 8 - disabled by default, use upload
+  _startCamWithLoop('cam8-video', LIVE_VIDEO_SRC_CAM8, startCam8Detection); // ADDED CAM 8 - default playback vid3.mp4
 }
 
 function stopCameras() {
