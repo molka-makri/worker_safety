@@ -1,48 +1,1005 @@
 {% extends 'safety_vision/base.html' %}
 
-{% block title %}Rapports — SafeVision{% endblock %}
+{% block title %}Rapport SafeVision AI{% endblock %}
+{% block page_title %}Rapport SafeVision AI{% endblock %}
+{% block page_subtitle %}Rapport dynamique des modules, modeles, detections et alertes{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <div>
-    <p class="eyebrow">Rapports</p>
-    <h1>Rapports SafeVision</h1>
-    <p>Consultez les synthèses et les tendances de surveillance.</p>
-  </div>
-  <div class="page-actions">
-    <button class="btn btn-secondary">Exporter PDF</button>
-    <button class="btn btn-primary">Nouveau rapport</button>
-  </div>
+{{ report_export|json_script:"report-export-data" }}
+
+<style>
+  .sv-report {
+    --ink: var(--text-primary);
+    --ink2: var(--text-secondary);
+    --ink3: var(--text-muted);
+    --surface: var(--bg-surface);
+    --raised: var(--bg-elevated);
+    --border: var(--bg-border);
+    --green: var(--accent-green);
+    --red: var(--accent-red);
+    --blue: var(--accent-blue);
+    --amber: var(--accent-yellow);
+    --orange: var(--accent-orange);
+    --purple: var(--accent-purple);
+    --shadow: 0 18px 50px rgba(0,0,0,.18);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .sv-report button {
+    font-family: var(--font-display);
+  }
+
+  .sv-report .hero {
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 8px;
+    background:
+      radial-gradient(ellipse at 18% 48%, rgba(0,194,255,.25), transparent 56%),
+      radial-gradient(ellipse at 82% 16%, rgba(123,97,255,.22), transparent 52%),
+      linear-gradient(135deg, #060814 0%, #101327 52%, #06151d 100%);
+  }
+  .sv-report .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(310px, .65fr);
+    gap: 24px;
+    align-items: center;
+    padding: 30px;
+    position: relative;
+    z-index: 1;
+  }
+  .sv-report .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,194,255,.13);
+    border: 1px solid rgba(0,194,255,.38);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .sv-report .pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: reportPulse 2s ease-in-out infinite;
+  }
+  @keyframes reportPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(74,227,181,.58); }
+    50% { box-shadow: 0 0 0 7px rgba(74,227,181,0); }
+  }
+  .sv-report .hero h1 {
+    max-width: 780px;
+    margin: 0 0 10px;
+    font-size: 34px;
+    line-height: 1.04;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+  .sv-report .hero h1 span {
+    background: linear-gradient(90deg, #00c2ff, #7b61ff, #4ae3b5);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .sv-report .hero p {
+    margin: 0;
+    max-width: 850px;
+    color: rgba(255,255,255,.72);
+    line-height: 1.62;
+    font-size: 13px;
+  }
+  .sv-report .hero-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .sv-report .btn-primary,
+  .sv-report .btn-outline {
+    min-height: 36px;
+    border-radius: 8px;
+    padding: 9px 16px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .sv-report .btn-primary {
+    border: 1px solid #00c2ff;
+    background: #00c2ff;
+    color: #061018;
+  }
+  .sv-report .btn-outline {
+    background: rgba(255,255,255,.06);
+    color: rgba(255,255,255,.84);
+    border: 1px solid rgba(255,255,255,.18);
+  }
+  .sv-report .hero-stamps {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .sv-report .stamp {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px;
+    padding: 11px 13px;
+  }
+  .sv-report .stamp-label {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: rgba(255,255,255,.48);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .sv-report .stamp-value {
+    font-size: 12px;
+    font-weight: 900;
+    text-align: right;
+  }
+  .sv-report .green { color: var(--green); }
+  .sv-report .amber { color: var(--amber); }
+  .sv-report .red { color: var(--red); }
+
+  .sv-report .kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .sv-report .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 16px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .sv-report .kpi::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    height: 3px;
+    background: var(--kpi, var(--blue));
+  }
+  .sv-report .kpi-label {
+    font-family: var(--font-mono);
+    color: var(--ink3);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .sv-report .kpi-value {
+    color: var(--kpi, var(--blue));
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 900;
+  }
+  .sv-report .kpi-sub {
+    color: var(--ink2);
+    font-size: 11px;
+    margin-top: 7px;
+    line-height: 1.4;
+  }
+  .sv-report .kpi-trend {
+    position: absolute;
+    right: 14px;
+    top: 14px;
+    color: var(--kpi, var(--blue));
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .sv-report .section-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .sv-report .section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .sv-report .section-head::before {
+    content: "";
+    width: 4px;
+    height: 15px;
+    border-radius: 999px;
+    background: var(--head, var(--blue));
+  }
+  .sv-report .section-head h2 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+  }
+  .sv-report .section-note {
+    margin-left: auto;
+    color: var(--ink3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .sv-report .cam-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 12px;
+  }
+  .sv-report .cam-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #080b12;
+  }
+  .sv-report .cam-feed {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    position: relative;
+    overflow: hidden;
+    background: #080b12;
+  }
+  .sv-report .cam-feed svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .sv-report .capture-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+  .sv-report .cam-header {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    z-index: 3;
+    background: linear-gradient(180deg, rgba(0,0,0,.72), transparent);
+  }
+  .sv-report .cam-name,
+  .sv-report .cam-live {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: rgba(255,255,255,.9);
+  }
+  .sv-report .cam-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--red);
+    font-weight: 800;
+  }
+  .sv-report .cam-live::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+  }
+  .sv-report .cam-info {
+    background: var(--surface);
+    padding: 11px 12px 12px;
+  }
+  .sv-report .cam-title {
+    font-size: 13px;
+    font-weight: 900;
+    margin-bottom: 4px;
+  }
+  .sv-report .cam-meta {
+    font-family: var(--font-mono);
+    color: var(--ink3);
+    font-size: 10px;
+  }
+  .sv-report .cam-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 8px;
+  }
+  .sv-report .badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .04em;
+    color: var(--ink);
+    background: var(--raised);
+    white-space: nowrap;
+  }
+  .sv-report .badge.danger { color: var(--red); border-color: rgba(255,59,47,.42); background: rgba(255,59,47,.1); }
+  .sv-report .badge.success { color: var(--green); border-color: rgba(74,227,181,.42); background: rgba(74,227,181,.1); }
+  .sv-report .badge.info { color: var(--blue); border-color: rgba(0,194,255,.42); background: rgba(0,194,255,.1); }
+  .sv-report .badge.amber { color: var(--amber); border-color: rgba(255,184,0,.42); background: rgba(255,184,0,.1); }
+  .sv-report .conf-bar {
+    height: 5px;
+    background: var(--raised);
+    border-radius: 999px;
+    margin-top: 9px;
+    overflow: hidden;
+  }
+  .sv-report .conf-fill {
+    height: 100%;
+    border-radius: 999px;
+  }
+
+  .sv-report .mod-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 12px;
+  }
+  .sv-report .mod-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--raised);
+  }
+  .sv-report .mod-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-left: 4px solid var(--accent, var(--blue));
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .sv-report .mod-name {
+    font-size: 15px;
+    font-weight: 900;
+    margin-bottom: 3px;
+  }
+  .sv-report .mod-axis {
+    font-family: var(--font-mono);
+    color: var(--ink3);
+    font-size: 10px;
+  }
+  .sv-report .risk-chip {
+    flex-shrink: 0;
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 900;
+  }
+  .sv-report .risk-chip.high { color: var(--red); border: 1px solid rgba(255,59,47,.36); background: rgba(255,59,47,.1); }
+  .sv-report .risk-chip.med { color: var(--amber); border: 1px solid rgba(255,184,0,.36); background: rgba(255,184,0,.1); }
+  .sv-report .risk-chip.low { color: var(--green); border: 1px solid rgba(74,227,181,.36); background: rgba(74,227,181,.1); }
+  .sv-report .mod-card-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .sv-report .goal-text {
+    color: var(--ink2);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .sv-report .mini-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .sv-report .mini-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 6px;
+    text-align: center;
+  }
+  .sv-report .mini-stat b {
+    display: block;
+    color: var(--accent, var(--blue));
+    font-size: 16px;
+    font-weight: 900;
+  }
+  .sv-report .mini-stat span {
+    display: block;
+    color: var(--ink3);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .sv-report .prog {
+    height: 7px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .sv-report .prog-fill {
+    height: 100%;
+    border-radius: 999px;
+  }
+  .sv-report .file-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .sv-report .split {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .sv-report .block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .sv-report .block-title {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  .sv-report .block-body {
+    padding: 12px 14px;
+  }
+  .sv-report .mix-item {
+    display: grid;
+    grid-template-columns: 132px 1fr 42px;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+  }
+  .sv-report .mix-label {
+    color: var(--ink2);
+    font-size: 11px;
+  }
+  .sv-report .mix-bar {
+    height: 7px;
+    background: var(--raised);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .sv-report .mix-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+  }
+  .sv-report .mix-count {
+    color: var(--ink3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-align: right;
+  }
+
+  .sv-report .alerts-table,
+  .sv-report .det-table,
+  .sv-report .model-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .sv-report th {
+    text-align: left;
+    padding: 9px 12px;
+    color: var(--ink3);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .sv-report td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .sv-report tr:last-child td {
+    border-bottom: none;
+  }
+  .sv-report .table-wrap {
+    overflow: auto;
+  }
+
+  .sv-report .arch-flow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 12px;
+  }
+  .sv-report .arch-step {
+    padding: 16px 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    text-align: center;
+  }
+  .sv-report .arch-step:first-child { border-radius: 8px 0 0 8px; }
+  .sv-report .arch-step:last-child { border-radius: 0 8px 8px 0; }
+  .sv-report .arch-step:not(:first-child) { border-left: none; }
+  .sv-report .arch-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 900;
+    margin: 0 auto 10px;
+  }
+  .sv-report .arch-step b {
+    display: block;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .sv-report .arch-step p {
+    color: var(--ink2);
+    font-size: 10px;
+    line-height: 1.45;
+  }
+  .sv-report .prof-box {
+    padding: 22px;
+    background: linear-gradient(135deg, rgba(0,194,255,.08), rgba(123,97,255,.05));
+    border-top: 1px solid rgba(0,194,255,.18);
+  }
+  .sv-report .prof-box p {
+    color: var(--ink2);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .sv-report .prof-box p + p {
+    margin-top: 12px;
+  }
+
+  @media (max-width: 1180px) {
+    .sv-report .cam-grid,
+    .sv-report .kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 860px) {
+    .sv-report .hero-grid,
+    .sv-report .mod-grid,
+    .sv-report .split,
+    .sv-report .arch-flow,
+    .sv-report .cam-grid,
+    .sv-report .kpis {
+      grid-template-columns: 1fr;
+    }
+    .sv-report .arch-step,
+    .sv-report .arch-step:first-child,
+    .sv-report .arch-step:last-child,
+    .sv-report .arch-step:not(:first-child) {
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: -1px;
+    }
+    .sv-report .mini-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media print {
+    .sidebar,
+    .topbar,
+    .sv-report .hero-btns {
+      display: none !important;
+    }
+    .main-content {
+      margin-left: 0 !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+    .content-area {
+      overflow: visible !important;
+      padding: 0 !important;
+    }
+    .sv-report {
+      color: #111;
+    }
+  }
+</style>
+
+<div class="sv-report">
+  <section class="hero">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-badge"><span class="pulse"></span>Soutenance SafeVision AI - Systeme actif</div>
+        <h1>Rapport complet<br><span>Surveillance industrielle intelligente</span></h1>
+        <p>
+          Synthese technique alimentee par la base Django : modules IA, poids de modeles presents,
+          detections positives, alertes critiques, historique et exports. Les cartes ci-dessous sont
+          construites depuis les vraies detections enregistrees par les API de chute, fatigue, EPI,
+          signalisation et risques environnementaux.
+        </p>
+        <div class="hero-btns">
+          <button class="btn-primary" type="button" onclick="window.print()">Imprimer PDF</button>
+          <button class="btn-outline" type="button" onclick="exportCSV()">Exporter CSV</button>
+          <button class="btn-outline" type="button" onclick="exportJSON()">Exporter JSON</button>
+        </div>
+      </div>
+      <div class="hero-stamps">
+        <div class="stamp"><span class="stamp-label">Genere le</span><span class="stamp-value">{{ generated_at|date:'d/m/Y H:i' }}</span></div>
+        <div class="stamp"><span class="stamp-label">Modules actifs</span><span class="stamp-value green">{{ kpis.active_modules }} / {{ kpis.total_modules }} operationnels</span></div>
+        <div class="stamp"><span class="stamp-label">Module le plus charge</span><span class="stamp-value amber">{{ kpis.risk_focus }}</span></div>
+        <div class="stamp"><span class="stamp-label">Couverture modeles</span><span class="stamp-value green">{{ kpis.model_files_ready }} / {{ kpis.model_files_total }} fichiers</span></div>
+        <div class="stamp"><span class="stamp-label">Historique DB</span><span class="stamp-value">{{ kpis.total_alerts }} alertes / {{ kpis.total_detections }} detections</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="kpis">
+    <div class="kpi" style="--kpi:var(--blue)">
+      <div class="kpi-label">Detections analysees</div>
+      <div class="kpi-value">{{ kpis.total_detections }}</div>
+      <div class="kpi-sub">{{ kpis.positive_detections }} evenements reels conserves en base</div>
+      <div class="kpi-trend">DB</div>
+    </div>
+    <div class="kpi" style="--kpi:var(--red)">
+      <div class="kpi-label">Alertes critiques</div>
+      <div class="kpi-value">{{ kpis.critical_alerts }}</div>
+      <div class="kpi-sub">{{ kpis.total_alerts }} alertes au total, tous modules confondus</div>
+      <div class="kpi-trend">ALERT</div>
+    </div>
+    <div class="kpi" style="--kpi:var(--green)">
+      <div class="kpi-label">Confiance moyenne</div>
+      <div class="kpi-value">{{ kpis.avg_confidence }}%</div>
+      <div class="kpi-sub">Moyenne calculee sur les frames historisees</div>
+      <div class="kpi-trend">IA</div>
+    </div>
+    <div class="kpi" style="--kpi:var(--amber)">
+      <div class="kpi-label">Readiness modeles</div>
+      <div class="kpi-value">{{ kpis.readiness }}%</div>
+      <div class="kpi-sub">Poids de modeles trouves dans le dossier local</div>
+      <div class="kpi-trend">FILES</div>
+    </div>
+  </section>
+
+  <section class="section-wrap">
+    <div class="section-head" style="--head:var(--red)">
+      <h2>Captures de detection IA en temps reel</h2>
+      <span class="section-note">{{ capture_cards|length }} preuves dynamiques</span>
+    </div>
+    <div class="cam-grid">
+      {% for card in capture_cards %}
+      <article class="cam-card">
+        <div class="cam-feed">
+          {% if card.capture_url %}
+          <img class="capture-img" src="{{ card.capture_url }}" alt="{{ card.title }}">
+          {% else %}
+          <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            {% if card.visual == 'fall' %}
+            <rect width="320" height="180" fill="#101522"/>
+            <rect y="128" width="320" height="52" fill="#1c2233"/>
+            <line x1="0" y1="128" x2="320" y2="128" stroke="#32394f"/>
+            <ellipse cx="154" cy="148" rx="62" ry="14" fill="#32394f"/>
+            <rect x="105" y="137" width="96" height="19" rx="9" fill="#4c5574"/>
+            <circle cx="103" cy="144" r="12" fill="#5f6b90"/>
+            <rect x="188" y="142" width="48" height="11" rx="5" fill="#4c5574" transform="rotate(13 188 142)"/>
+            <rect x="92" y="125" width="154" height="48" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="98" y="121" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">CHUTE - {{ card.confidence }}%</text>
+            {% elif card.visual == 'fatigue' %}
+            <rect width="320" height="180" fill="#05070a"/>
+            <ellipse cx="160" cy="104" rx="75" ry="88" fill="#8c96a8" opacity=".42"/>
+            <ellipse cx="132" cy="80" rx="22" ry="8" fill="none" stroke="{{ card.accent }}" stroke-width="4" stroke-dasharray="8 5"/>
+            <ellipse cx="188" cy="80" rx="22" ry="8" fill="none" stroke="{{ card.accent }}" stroke-width="4" stroke-dasharray="8 5"/>
+            <ellipse cx="160" cy="126" rx="22" ry="31" fill="#111827" opacity=".75"/>
+            <rect x="104" y="62" width="112" height="40" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="105" y="54" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">FATIGUE - {{ card.confidence }}%</text>
+            {% elif card.visual == 'spill' %}
+            <rect width="320" height="180" fill="#0b1720"/>
+            <rect y="118" width="320" height="62" fill="#182534"/>
+            <path d="M38 145 C75 120,112 153,145 132 C190 105,214 150,276 128 L292 168 C232 179,168 165,104 172 C64 176,42 164,38 145Z" fill="#00c2ff" opacity=".42"/>
+            <path d="M44 142 C82 122,110 149,148 130 C191 109,222 145,272 130" fill="none" stroke="#7fe9ff" stroke-width="2"/>
+            <rect x="30" y="106" width="264" height="64" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="36" y="98" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">SPILL - {{ card.confidence }}%</text>
+            {% elif card.visual == 'manhole' %}
+            <rect width="320" height="180" fill="#15120e"/>
+            <rect y="112" width="320" height="68" fill="#242018"/>
+            <ellipse cx="160" cy="132" rx="70" ry="28" fill="#070707"/>
+            <ellipse cx="160" cy="128" rx="68" ry="23" fill="none" stroke="#ff9d2e" stroke-width="4"/>
+            <rect x="84" y="94" width="154" height="70" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="90" y="86" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">MANHOLE - {{ card.confidence }}%</text>
+            {% elif card.visual == 'exit' %}
+            <rect width="320" height="180" fill="#10141d"/>
+            <rect x="110" y="34" width="92" height="110" fill="#132c20" stroke="#4ae3b5" stroke-width="3"/>
+            <text x="132" y="92" fill="#4ae3b5" font-family="monospace" font-size="17" font-weight="700">EXIT</text>
+            <rect x="78" y="128" width="180" height="32" rx="5" fill="#4b2730"/>
+            <rect x="70" y="118" width="196" height="48" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="76" y="110" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">BLOCKED - {{ card.confidence }}%</text>
+            {% elif card.visual == 'ppe' %}
+            <rect width="320" height="180" fill="#08141a"/>
+            <line x1="0" y1="132" x2="320" y2="132" stroke="#1f3442"/>
+            <circle cx="158" cy="58" r="18" fill="#4c5574"/>
+            <rect x="133" y="78" width="50" height="58" rx="9" fill="#3f4968"/>
+            <rect x="108" y="78" width="24" height="48" rx="8" fill="#3f4968" transform="rotate(-10 108 78)"/>
+            <rect x="184" y="78" width="24" height="48" rx="8" fill="#3f4968" transform="rotate(10 184 78)"/>
+            <rect x="120" y="38" width="76" height="108" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="124" y="30" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">EPI - {{ card.confidence }}%</text>
+            {% elif card.visual == 'sign' %}
+            <rect width="320" height="180" fill="#11131f"/>
+            <polygon points="160,38 236,142 84,142" fill="#2c1d32" stroke="#ff3b5c" stroke-width="5"/>
+            <rect x="133" y="82" width="54" height="13" rx="3" fill="#ff3b5c"/>
+            <rect x="133" y="105" width="54" height="13" rx="3" fill="#ff3b5c"/>
+            <rect x="78" y="30" width="164" height="125" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="84" y="24" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">SIGN - {{ card.confidence }}%</text>
+            {% else %}
+            <rect width="320" height="180" fill="#101522"/>
+            <circle cx="160" cy="90" r="54" fill="{{ card.accent }}" opacity=".18"/>
+            <rect x="94" y="54" width="132" height="72" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="100" y="46" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">DETECTION - {{ card.confidence }}%</text>
+            {% endif %}
+            <rect x="0" y="145" width="320" height="35" fill="rgba(0,0,0,.48)"/>
+            <text x="12" y="166" fill="#fff" font-family="monospace" font-size="10">ID #{{ card.id }} / {{ card.detections_count }} objets</text>
+            <text x="218" y="166" fill="#fff" font-family="monospace" font-size="10">{{ card.camera }}</text>
+          </svg>
+          {% endif %}
+          <div class="cam-header">
+            <span class="cam-name">{{ card.camera }} / {{ card.module }}</span>
+            <span class="cam-live">DB</span>
+          </div>
+        </div>
+        <div class="cam-info">
+          <div class="cam-title">{{ card.title }}</div>
+          <div class="cam-meta">{{ card.timestamp|date:'d/m/Y H:i:s' }} - {{ card.stack }}</div>
+          <div class="cam-badges">
+            {% for badge in card.badges %}
+            <span class="badge {% if card.confidence >= 90 %}danger{% elif card.confidence >= 70 %}amber{% else %}info{% endif %}">{{ badge }}</span>
+            {% endfor %}
+          </div>
+          <div class="conf-bar"><div class="conf-fill" style="width:{{ card.confidence }}%;background:linear-gradient(90deg,{{ card.accent }},#4ae3b5)"></div></div>
+        </div>
+      </article>
+      {% empty %}
+      <div class="block-body" style="grid-column:1/-1;color:var(--ink3)">Aucune detection positive enregistree pour generer les captures.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section-wrap">
+    <div class="section-head" style="--head:var(--blue)">
+      <h2>Evaluation par module IA</h2>
+      <span class="section-note">{{ module_reports|length }} modules suivis</span>
+    </div>
+    <div class="mod-grid">
+      {% for item in module_reports %}
+      <article class="mod-card" style="--accent:{{ item.accent }}">
+        <div class="mod-card-head">
+          <div>
+            <div class="mod-name">{{ item.short_name }}</div>
+            <div class="mod-axis">{{ item.axis }} - {{ item.stack }}</div>
+          </div>
+          <span class="risk-chip {% if item.risk_score >= 80 %}high{% elif item.risk_score >= 60 %}med{% else %}low{% endif %}">Risque {{ item.risk_score }}/100</span>
+        </div>
+        <div class="mod-card-body">
+          <p class="goal-text">{{ item.goal }}</p>
+          <div class="mini-stats">
+            <div class="mini-stat"><b>{{ item.total_detections }}</b><span>frames</span></div>
+            <div class="mini-stat"><b>{{ item.positive_detections }}</b><span>events</span></div>
+            <div class="mini-stat"><b>{{ item.alerts_count }}</b><span>alertes</span></div>
+            <div class="mini-stat"><b>{{ item.avg_confidence }}%</b><span>confiance</span></div>
+          </div>
+          <div>
+            <div class="mod-axis" style="margin-bottom:5px">Couverture des poids modeles: {{ item.coverage }}%</div>
+            <div class="prog"><div class="prog-fill" style="width:{{ item.coverage }}%;background:linear-gradient(90deg,{{ item.accent }},#4ae3b5)"></div></div>
+            <div class="file-pills">
+              {% for file in item.available_files %}
+              <span class="badge success">{{ file }}</span>
+              {% endfor %}
+              {% for file in item.missing_files %}
+              <span class="badge danger">{{ file }}</span>
+              {% endfor %}
+              {% if not item.model_files %}
+              <span class="badge info">Modele configurable</span>
+              {% endif %}
+            </div>
+          </div>
+          <p class="goal-text"><strong>Impact:</strong> {{ item.impact }}</p>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section-wrap">
+    <div class="split">
+      <div class="block">
+        <div class="block-title">Mix des detections</div>
+        <div class="block-body">
+          {% for item in detection_mix %}
+          <div class="mix-item">
+            <div class="mix-label">{{ item.label }}</div>
+            <div class="mix-bar"><div class="mix-bar-fill" style="width:{{ item.width }}%;background:linear-gradient(90deg,#00c2ff,#4ae3b5)"></div></div>
+            <div class="mix-count">{{ item.count }}</div>
+          </div>
+          {% empty %}
+          <p class="goal-text">Aucune detection disponible.</p>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="block">
+        <div class="block-title">Alertes recentes</div>
+        <div class="table-wrap">
+          <table class="alerts-table">
+            <thead><tr><th>Severite</th><th>Module</th><th>Alerte</th><th>Date</th></tr></thead>
+            <tbody>
+            {% for alert in alerts %}
+              <tr>
+                <td><span class="badge {% if alert.severity == 'critical' %}danger{% elif alert.severity == 'high' %}amber{% else %}success{% endif %}">{{ alert.severity }}</span></td>
+                <td style="font-weight:900">{{ alert.module.name }}</td>
+                <td><strong>{{ alert.title }}</strong><br><span style="color:var(--ink3);font-size:10px">{{ alert.description }}</span></td>
+                <td style="font-family:var(--font-mono);font-size:9px;color:var(--ink3)">{{ alert.timestamp|date:'d/m/Y H:i:s' }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" style="text-align:center;color:var(--ink3)">Aucune alerte enregistree.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-wrap">
+    <div class="section-head" style="--head:var(--blue)">
+      <h2>Dernieres detections - preuve d'alimentation dynamique</h2>
+      <span class="section-note">25 dernieres lignes</span>
+    </div>
+    <div class="table-wrap">
+      <table class="det-table">
+        <thead><tr><th>ID</th><th>Module</th><th>Type</th><th>Camera</th><th>Confiance</th><th>Statut</th><th>Date</th></tr></thead>
+        <tbody>
+        {% for det in recent_detections %}
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--ink3)">#{{ det.id }}</td>
+            <td style="font-weight:900">{{ det.module }}</td>
+            <td>{{ det.kind }}</td>
+            <td style="font-family:var(--font-mono)">{{ det.camera }}</td>
+            <td style="font-weight:900;color:{% if det.confidence > 90 %}var(--red){% elif det.confidence > 70 %}var(--amber){% else %}var(--green){% endif %}">{{ det.confidence }}%</td>
+            <td><span class="badge {% if det.status == 'DANGER' %}danger{% else %}success{% endif %}">{{ det.status }}</span></td>
+            <td style="font-family:var(--font-mono);font-size:9px;color:var(--ink3)">{{ det.timestamp|date:'d/m/Y H:i:s' }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" style="text-align:center;color:var(--ink3)">Aucune detection historique.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section-wrap">
+    <div class="section-head" style="--head:var(--purple)">
+      <h2>Inventaire technique des modeles</h2>
+      <span class="section-note">fichiers, cameras et pipeline</span>
+    </div>
+    <div class="table-wrap">
+      <table class="model-table">
+        <thead><tr><th>Module</th><th>Cameras / videos</th><th>Pipeline</th><th>Forces</th><th>Etat fichiers</th></tr></thead>
+        <tbody>
+        {% for item in module_reports %}
+          <tr>
+            <td style="font-weight:900;color:{{ item.accent }}">{{ item.short_name }}</td>
+            <td>
+              {% for cam in item.cameras %}
+              <div>{{ cam }}</div>
+              {% endfor %}
+            </td>
+            <td>
+              {% for step in item.pipeline %}
+              <div>{{ forloop.counter }}. {{ step }}</div>
+              {% endfor %}
+            </td>
+            <td>
+              {% for strength in item.strengths %}
+              <div>{{ strength }}</div>
+              {% endfor %}
+            </td>
+            <td>
+              <strong>{{ item.available_files|length }}/{{ item.model_files|length }}</strong> disponibles
+              {% if item.missing_files %}
+              <br><span style="color:var(--red);font-size:10px">Manquants: {{ item.missing_files|join:', ' }}</span>
+              {% else %}
+              <br><span style="color:var(--green);font-size:10px">Pret</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section-wrap">
+    <div class="section-head" style="--head:var(--purple)">
+      <h2>Architecture IA - du flux video a la decision</h2>
+    </div>
+    <div class="arch-flow">
+      <div class="arch-step">
+        <div class="arch-num" style="background:rgba(0,194,255,.15);color:#00c2ff">1</div>
+        <b>Acquisition</b>
+        <p>Chaque page module capture les frames depuis les videos locales ou la camera active.</p>
+      </div>
+      <div class="arch-step">
+        <div class="arch-num" style="background:rgba(123,97,255,.15);color:#7b61ff">2</div>
+        <b>Inference</b>
+        <p>Les detecteurs Python chargent les poids YOLO, ResNet ou PyTorch selon le risque.</p>
+      </div>
+      <div class="arch-step">
+        <div class="arch-num" style="background:rgba(255,184,0,.15);color:#ffb800">3</div>
+        <b>Post-traitement</b>
+        <p>Bounding boxes, scores, masques, seuils et confirmation temporelle reduisent les faux positifs.</p>
+      </div>
+      <div class="arch-step">
+        <div class="arch-num" style="background:rgba(74,227,181,.15);color:#4ae3b5">4</div>
+        <b>Exploitation</b>
+        <p>Django sauvegarde Detection et Alert pour alimenter tableaux, notifications, rapport et exports.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-wrap">
+    <div class="section-head" style="--head:var(--green)">
+      <h2>Argumentaire de soutenance</h2>
+    </div>
+    <div class="prof-box">
+      <p><strong>SafeVision AI</strong> n'est pas une simple maquette: la meme structure de donnees alimente le dashboard, les pages modules, les alertes, les tableaux temps reel et ce rapport. Chaque detection garde son module, son score de confiance, sa camera, son horodatage et ses details bruts.</p>
+      <p>La force du projet est sa modularite: chute, fatigue, EPI, signalisation, deversement, plaque ouverte et sortie bloquee restent dans des detecteurs Python separes, mais remontent vers une interface unique et exportable. C'est exactement ce qu'on attend d'une plateforme industrielle extensible.</p>
+      <p>Pour la presentation, ouvrez ce rapport apres avoir lance quelques videos de test: les KPI, les captures, les alertes et les lignes de detection changent automatiquement avec les resultats reels des modeles.</p>
+    </div>
+  </section>
 </div>
 
-<section class="panel">
-  <div class="panel-header">
-    <h2>Résumé des performances</h2>
-  </div>
-  <div class="panel-body report-grid">
-    <article class="report-card">
-      <h3>Alertes critiques</h3>
-      <p>24 dernièrement</p>
-    </article>
-    <article class="report-card">
-      <h3>Détections de chute</h3>
-      <p>12 confirmed</p>
-    </article>
-    <article class="report-card">
-      <h3>Modules actifs</h3>
-      <p>{{ modules.count if modules else 'N/A' }}</p>
-    </article>
-  </div>
-</section>
-
-<section class="panel">
-  <div class="panel-header">
-    <h2>Dernières alertes</h2>
-  </div>
-  <div class="panel-body">
-    <div class="empty-state">
-      <p>Aucun rapport détaillé disponible dans cette version de démonstration.</p>
-    </div>
-  </div>
-</section>
+<script>
+  function getRows() {
+    return JSON.parse(document.getElementById('report-export-data').textContent || '[]');
+  }
+  function dl(name, content, type) {
+    const blob = new Blob([content], { type });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+  function exportCSV() {
+    const rows = getRows();
+    const headers = ['module','stack','detections','events','alerts','critical','confidence','coverage','risk'];
+    const body = rows.map(row => headers.map(key => `"${String(row[key] ?? '').replace(/"/g, '""')}"`).join(';'));
+    dl('safevision-rapport.csv', [headers.join(';'), ...body].join('\n'), 'text/csv;charset=utf-8');
+  }
+  function exportJSON() {
+    dl('safevision-rapport.json', JSON.stringify(getRows(), null, 2), 'application/json;charset=utf-8');
+  }
+</script>
 {% endblock %}

@@ -40,7 +40,7 @@
             <canvas id="cam{{ camera.id }}-overlay-canvas" class="cam-overlay-canvas"></canvas>
             <div class="cam-video-overlay" id="cam{{ camera.id }}-video-overlay">
               <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-                <span style="font-size:10px; font-family:var(--font-mono);">Fichier: {{ camera.file_label|default:camera.source }}</span>
+                <span style="font-size:10px; font-family:var(--font-mono);">Fichier: {{ camera.file_label }}</span>
                 <span style="font-size:10px; font-family:var(--font-mono);" id="{{ camera.status_id }}">Detection: en attente...</span>
               </div>
             </div>
@@ -48,7 +48,7 @@
           <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
             <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
             {% for chip in camera.chips %}
-            <span class="toggle-chip on" style="--chip-color:{{ chip.color }}; font-size:9px; padding:2px 6px">{{ chip.label }}</span>
+            <span class="toggle-chip on" style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px">{{ chip.label }}</span>
             {% endfor %}
             {% if camera.secondary_status_id %}
             <span style="font-size:10px; font-family:var(--font-mono); margin-left:auto" id="{{ camera.secondary_status_id }}">Detection: en attente...</span>
@@ -383,7 +383,7 @@ function addModuleAlert(result) {
 
   container.querySelector('.empty-state')?.remove();
   const pct = Math.round((Number(result.confidence) || 0) * 100);
-  const severity = result.severity || (result.type === 'fall' || result.type === 'spill' || result.type === 'blocked_exit' ? 'critical' : 'warning');
+  const severity = result.severity || (['fall', 'spill', 'blocked_exit'].includes(result.type) ? 'critical' : 'warning');
   const message = result.message || `${detectionLabel(result.type)} detecte sur ${cameraLabel(result.cam)} (${pct}%)`;
   const time = result.time || formatTime();
   const item = document.createElement('div');
