@@ -27,7 +27,37 @@
         <span class="panel-title">Flux Vidéo — Analyse en cours</span>
       </div>
 
-      {% if module_slug == 'fatigue' or module_slug == 'fall' or module_slug == 'falling' %}
+      {% if module_cameras %}
+      <div class="live-grid" id="live-grid" style="padding:12px; gap:10px">
+        {% for camera in module_cameras %}
+        <div class="cam-tile" id="cam-tile-{{ camera.id }}">
+          <div class="cam-header">
+            <div class="status-dot active"></div>
+            <span>{{ camera.name }}</span>
+          </div>
+          <div class="cam-feed">
+            <video id="cam{{ camera.id }}-video" class="cam-video" src="{{ camera.source }}" muted loop playsinline preload="auto"></video>
+            <canvas id="cam{{ camera.id }}-overlay-canvas" class="cam-overlay-canvas"></canvas>
+            <div class="cam-video-overlay" id="cam{{ camera.id }}-video-overlay">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+                <span style="font-size:10px; font-family:var(--font-mono);">Fichier: {{ camera.file_label }}</span>
+                <span style="font-size:10px; font-family:var(--font-mono);" id="{{ camera.status_id }}">Detection: en attente...</span>
+              </div>
+            </div>
+          </div>
+          <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
+            <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
+            {% for chip in camera.chips %}
+            <span class="toggle-chip on" style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px">{{ chip.label }}</span>
+            {% endfor %}
+            {% if camera.secondary_status_id %}
+            <span style="font-size:10px; font-family:var(--font-mono); margin-left:auto" id="{{ camera.secondary_status_id }}">Detection: en attente...</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% elif module_slug == 'fatigue' or module_slug == 'fall' or module_slug == 'falling' %}
       <div class="live-grid" id="live-grid" style="padding:12px; gap:10px">
 
         <!-- CAM 1 — Détection chute -->
@@ -228,6 +258,32 @@ function statusBadge(detected) {
   return '<span style="font-size:10px; padding:2px 7px; border-radius:4px; font-weight:700; background:rgba(74,227,181,.15); color:var(--accent-green)">OK</span>';
 }
 
+function detectionLabel(type) {
+  return ({
+    fatigue: 'Fatigue',
+    fall: 'Chute',
+    spill: 'Deversement',
+    manhole: 'Manhole',
+    blocked_exit: 'Issue bloquee',
+    ppe: 'EPI',
+    sign_defect: 'Signalisation',
+    proximity: 'Proximite',
+  })[type] || 'Detection';
+}
+
+function cameraLabel(cam) {
+  return ({
+    cam1: 'CAM 1',
+    cam2: 'CAM 2',
+    cam3: 'CAM 3',
+    cam4: 'CAM 4',
+    cam5: 'CAM 5',
+    cam6: 'CAM 6',
+    cam7: 'CAM 7',
+    cam8: 'CAM 8',
+  })[cam] || 'Camera';
+}
+
 function updateDetectionCount() {
   const countEl = document.getElementById('det-count');
   if (countEl) countEl.textContent = moduleRuntimeState.sequence + ' détections';
@@ -296,6 +352,39 @@ function addModuleAlert(result) {
   const message = result.message || (result.type === 'fall'
     ? `Chute détectée sur ${cameraLabel(result.cam)} (${pct}%)`
     : `Fatigue détectée sur ${cameraLabel(result.cam)} (${pct}%)`);
+  const time = result.time || formatTime();
+  const item = document.createElement('div');
+  item.className = 'alert-item';
+  item.style.marginBottom = '8px';
+  item.innerHTML = `
+    <div class="alert-severity sev-${severity}"></div>
+    <div class="alert-body">
+      <div class="alert-module">${escapeHtml(MODULE_NAME.toUpperCase())}</div>
+      <div class="alert-msg">${escapeHtml(message)}</div>
+      <div class="alert-time">${escapeHtml(time)}</div>
+    </div>`;
+  container.insertBefore(item, container.firstChild);
+  while (container.children.length > 20) container.removeChild(container.lastChild);
+  moduleRuntimeState.alerts.unshift({ severity, message, time });
+}
+
+function addModuleAlert(result) {
+  if (!result.detected && !result.message) return;
+  const alertKey = result.alertKey || (result.id ? `alert-${result.id}` : '');
+  if (alertKey) {
+    if (moduleRuntimeState.seenAlertIds.has(alertKey)) return;
+    moduleRuntimeState.seenAlertIds.add(alertKey);
+    if (!result.alertKey) {
+      moduleRuntimeState.lastAlertId = Math.max(moduleRuntimeState.lastAlertId, Number(result.id) || 0);
+    }
+  }
+  const container = document.getElementById('module-alerts');
+  if (!container) return;
+
+  container.querySelector('.empty-state')?.remove();
+  const pct = Math.round((Number(result.confidence) || 0) * 100);
+  const severity = result.severity || (['fall', 'spill', 'blocked_exit'].includes(result.type) ? 'critical' : 'warning');
+  const message = result.message || `${detectionLabel(result.type)} detecte sur ${cameraLabel(result.cam)} (${pct}%)`;
   const time = result.time || formatTime();
   const item = document.createElement('div');
   item.className = 'alert-item';
