@@ -27,8 +27,12 @@ from .exit_detector import detect_blocked_exit_in_frame
 from .proximity_detector import detect_proximity_in_frame, ProximityDetector
 from .ppe_detector import detect_ppe_in_frame
 from .sign_detector import detect_sign_in_image
+from .posture_detector import detect_posture_in_frame
+from .panic_detector import detect_panic_in_frame
+from .worker_tracking_detector import detect_worker_tracking_in_frame
 
 MODULE_SLUG_MAP = {
+<<<<<<< HEAD
     'ppe':        'PPE',
     'posture':    'Posture',
     'fatigue':    'Fatigue',
@@ -42,6 +46,72 @@ MODULE_SLUG_MAP = {
     'blocked-exit': 'Hazards',
     'fire':       'Fire',
     'machinery':  'Machinery',
+=======
+    'ppe': {
+        'id': 1,
+        'keywords': ('epi', 'ppe', 'signalisation', 'conformite'),
+        'fallback_name': 'Conformite EPI + Signalisation',
+        'fallback_description': 'Detection casques, gilets, signalisation manquante',
+        'icon': 'shield',
+        'color': '#4AE3B5',
+    },
+    'posture': {
+        'id': 2,
+        'keywords': ('posture', 'comportement'),
+        'fallback_name': 'Posture Dangereuse + Comportement',
+        'fallback_description': 'Analyse squelette, detection postures anormales',
+        'icon': 'activity',
+        'color': '#7B61FF',
+    },
+    'comportement': {'alias': 'posture'},
+    'fatigue': {
+        'id': 3,
+        'keywords': ('fatigue', 'effondrement', 'chute', 'incapacite'),
+        'fallback_name': 'Fatigue + Effondrement Travailleur',
+        'fallback_description': 'Detection fatigue, chute et immobilite',
+        'icon': 'eye',
+        'color': '#FFB800',
+    },
+    'incapacity': {'alias': 'fatigue'},
+    'falling': {'alias': 'fatigue'},
+    'fall': {'alias': 'fatigue'},
+    'tracking': {
+        'id': 4,
+        'keywords': ('tracking', 'suivi', 'presence', 'objets'),
+        'fallback_name': 'Suivi Presence + Objets Tombants',
+        'fallback_description': 'Comptage zone, suivi trajectoire objets',
+        'icon': 'target',
+        'color': '#00C2FF',
+    },
+    'hazards': {
+        'id': 5,
+        'keywords': ('hazards', 'risques', 'aleas', 'environnement', 'deversement', 'sorties'),
+        'fallback_name': 'Aleas Environnementaux',
+        'fallback_description': 'Detection deversements, encombrement, sorties bloquees',
+        'icon': 'alert-triangle',
+        'color': '#FF6B00',
+    },
+    'spill': {'alias': 'hazards'},
+    'manhole': {'alias': 'hazards'},
+    'blocked-exit': {'alias': 'hazards'},
+    'fire': {
+        'id': 6,
+        'keywords': ('feu', 'fumee', 'fire', 'lumiere'),
+        'fallback_name': 'Feu/Fumee + Changement Lumiere',
+        'fallback_description': 'Detection incendie, fumee, flash/explosion',
+        'icon': 'flame',
+        'color': '#FF3B2F',
+    },
+    'machinery': {
+        'id': 7,
+        'keywords': ('machines', 'machinery', 'proximite', 'anomalies'),
+        'fallback_name': 'Anomalies Machines + Proximite',
+        'fallback_description': 'Etincelles, fumee, proximite travailleur-machine',
+        'icon': 'settings',
+        'color': '#E040FB',
+    },
+    'proximity': {'alias': 'machinery'},
+>>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
 }
 
 MODULE_PAGE_CONFIG = {
@@ -284,6 +354,45 @@ MODULE_PAGE_CONFIG['fall'] = MODULE_PAGE_CONFIG['fatigue']
 
 def normalize_module_slug(slug):
     return MODULE_SLUG_ALIASES.get(slug, slug)
+
+MODULE_PAGE_CONFIG['posture'] = {
+    'page_title': 'Posture & Comportement',
+    'page_subtitle': 'Analyse posture dangereuse et panique — squelette YOLOv8 (99.2% mAP50)',
+    'description': (
+        'Detection des postures dangereuses (safe/unsafe) sur CAM 9 '
+        'et comportements de panique sur CAM 10 sans overlay squelette. '
+        'Pipeline deux etapes : extraction des points cles COCO-17 + classification YOLOv8/BiLSTM.'
+    ),
+    'cameras': [
+        {
+            'id': 9,
+            'name': 'CAM 9 - Posture Detection',
+            'role': 'Detection posture (safe/unsafe)',
+            'source': '/media/posture.mp4',
+            'file_label': 'posture.mp4',
+            'status_id': 'cam9-posture-status',
+            'chips': [
+                {'label': 'SAFE',      'color': '#4AE3B5'},
+                {'label': 'UNSAFE',    'color': '#FF3B2F'},
+                {'label': 'SQUELETTE', 'color': '#7B61FF'},
+            ],
+        },
+        {
+            'id': 10,
+            'name': 'CAM 10 - Panic Detection',
+            'role': 'Detection comportement panique',
+            'source': '/media/panic.mp4',
+            'file_label': 'panic.mp4',
+            'status_id': 'cam10-panic-status',
+            'chips': [
+                {'label': 'PANIC', 'color': '#FF3B2F'},
+                {'label': 'CALME', 'color': '#4AE3B5'},
+                {'label': 'LSTM', 'color': '#00C2FF'},
+            ],
+        },
+    ],
+}
+MODULE_PAGE_CONFIG['comportement'] = MODULE_PAGE_CONFIG['posture']
 
 
 def _normalize_module_slug(slug):
@@ -646,6 +755,7 @@ class ReportsView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+<<<<<<< HEAD
         modules = list(Module.objects.order_by('id'))
         detections = Detection.objects.select_related('module').order_by('-timestamp')
         alerts = Alert.objects.select_related('module').order_by('-timestamp')
@@ -739,6 +849,18 @@ class ReportsView(TemplateView):
                 'risk_focus': top_module['short_name'] if top_module else 'N/A',
             },
         })
+=======
+        modules = Module.objects.all()
+        alerts = Alert.objects.order_by('-timestamp')[:10]
+        context['app_name'] = 'Rapports SafeVision'
+        context['modules'] = modules
+        context['alerts'] = alerts
+        context['total_modules'] = modules.count()
+        context['total_alerts'] = Alert.objects.count()
+        context['critical_alerts'] = Alert.objects.filter(severity='critical').count()
+        context['total_detections'] = Detection.objects.count()
+        context['latest_alerts'] = alerts
+>>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
         return context
 
 
@@ -754,6 +876,12 @@ class ModuleDetailView(TemplateView):
             is_spill = 'spill_detected' in details
             is_manhole = 'manhole_detected' in details
             is_blocked_exit = 'blocked_exit_detected' in details
+            is_ppe_violation = 'ppe_violation' in details
+            is_sign_defect = 'sign_defect_detected' in details or 'is_defective' in details
+            is_proximity = 'proximity_detected' in details
+            is_posture = 'posture_unsafe' in details
+            is_panic = 'panic_detected' in details
+            is_worker_tracking = 'worker_tracking_detected' in details
             detected = bool(det.count)
             kind = (
                 'Fatigue' if is_fatigue else
@@ -761,10 +889,26 @@ class ModuleDetailView(TemplateView):
                 'Spill' if is_spill else
                 'Issue Bloquee' if is_blocked_exit else
                 'Manhole' if is_manhole else
+                'PPE Violation' if is_ppe_violation else
+                'Sign Defect' if is_sign_defect else
+                'Proximite' if is_proximity else
+                'Posture' if is_posture else
+                'Panique' if is_panic else
+                'Worker Tracking' if is_worker_tracking else
                 details.get('class', 'Detection')
             )
             source = details.get('camera') or details.get('source') or (
-                'CAM 2' if is_fatigue else 'CAM 1' if is_fall else 'CAM 3' if is_spill else 'CAM 6' if is_blocked_exit else 'CAM 5' if is_manhole else 'Module'
+                'CAM 2' if is_fatigue else
+                'CAM 1' if is_fall else
+                'CAM 3' if is_spill else
+                'CAM 6' if is_blocked_exit else
+                'CAM 5' if is_manhole else
+                'CAM 4' if is_ppe_violation else
+                'CAM 7' if is_sign_defect else
+                'CAM 8' if is_proximity or is_worker_tracking else
+                'CAM 9' if is_posture else
+                'CAM 10' if is_panic else
+                'Module'
             )
             confidence_pct = int(round((det.confidence or 0) * 100))
             rows.append({
@@ -974,22 +1118,38 @@ def _detection_to_event(det):
     is_spill = 'spill_detected' in details
     is_manhole = 'manhole_detected' in details
     is_blocked_exit = 'blocked_exit_detected' in details
-    is_ppe = 'ppe_violation' in details
-    is_sign = 'sign_defect_detected' in details
+    is_ppe_violation = 'ppe_violation' in details
+    is_sign_defect = 'sign_defect_detected' in details or 'is_defective' in details
     is_proximity = 'proximity_detected' in details
+    is_posture = 'posture_unsafe' in details
+    is_panic = 'panic_detected' in details
+    is_worker_tracking = 'worker_tracking_detected' in details
     event_type = (
         'fatigue' if is_fatigue else
         'fall' if is_fall else
         'spill' if is_spill else
         'manhole' if is_manhole else
         'blocked_exit' if is_blocked_exit else
-        'ppe' if is_ppe else
-        'sign_defect' if is_sign else
+        'ppe_violation' if is_ppe_violation else
+        'sign_defect' if is_sign_defect else
         'proximity' if is_proximity else
+        'posture' if is_posture else
+        'panic' if is_panic else
+        'worker_tracking' if is_worker_tracking else
         'detection'
     )
     cam = details.get('camera') or details.get('source') or (
-        'cam2' if is_fatigue else 'cam1' if is_fall else 'cam3' if is_spill else 'cam5' if is_manhole else 'cam6' if is_blocked_exit else 'cam4' if is_ppe else 'cam7' if is_sign else 'cam8' if is_proximity else 'module'
+        'cam2' if is_fatigue else
+        'cam1' if is_fall else
+        'cam3' if is_spill else
+        'cam5' if is_manhole else
+        'cam6' if is_blocked_exit else
+        'cam4' if is_ppe_violation else
+        'cam7' if is_sign_defect else
+        'cam8' if is_proximity or is_worker_tracking else
+        'cam9' if is_posture else
+        'cam10' if is_panic else
+        'module'
     )
     return {
         'id': det.id,
@@ -1837,3 +1997,229 @@ def api_blocked_exit_detection(request):
         return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Erreur detection sortie de secours : {e}'}, status=500)
+
+
+# ── /api/posture-detection/ — CAM 9 ──────────────────────────────────────────
+
+def api_posture_detection(request):
+    """Detection posture dangereuse (safe/unsafe) avec squelette COCO-17 — CAM 9."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Methode non autorisee'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        if 'image' not in data:
+            return JsonResponse({'status': 'error', 'message': 'Image requise pour la detection de posture'}, status=400)
+
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Erreur de decodage image : {e}'}, status=400)
+
+        camera = data.get('camera', 'cam9')
+        unsafe_detected, confidence, details = detect_posture_in_frame(frame, camera=camera)
+
+        module = get_module_by_slug('posture')
+        if module:
+            Detection.objects.create(
+                module=module,
+                confidence=confidence,
+                count=1 if unsafe_detected else 0,
+                details={
+                    'posture_detected': unsafe_detected,
+                    'posture': details.get('posture', 'safe'),
+                    'confidence': confidence,
+                    'camera': camera,
+                    'bbox': details.get('bbox'),
+                    'keypoints': details.get('keypoints', details.get('skeleton_keypoints', [])),
+                    'reasons': details.get('reasons', []),
+                    'persons_detected': details.get('persons_detected', 0),
+                    'frame_shape': list(map(int, frame.shape)),
+                    'model_version': '1.0.0',
+                    'model_available': details.get('model_available', False),
+                },
+            )
+
+            if unsafe_detected:
+                reasons_str = ', '.join(details.get('reasons', [])[:2]) or 'posture incorrecte'
+                Alert.objects.create(
+                    module=module,
+                    severity='warning',
+                    title='Posture dangereuse detectee !',
+                    description=f'Posture UNSAFE sur {camera.upper()} ({confidence:.2%}) — {reasons_str}',
+                    details={
+                        'confidence': confidence,
+                        'camera': camera,
+                        'event_type': 'posture',
+                        'reasons': details.get('reasons', []),
+                        'timestamp': datetime.now().isoformat(),
+                    },
+                )
+
+        return JsonResponse({
+            'status': 'success',
+            'unsafe_posture_detected': bool(unsafe_detected),
+            'posture': details.get('posture', 'safe'),
+            'confidence': float(confidence),
+            'details': details,
+            'model_available': details.get('model_available', False),
+            'message': 'Analyse posture terminee',
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur detection posture : {e}'}, status=500)
+
+
+# ── /api/worker-tracking-detection/ ─────────────────────────────────────────
+
+def api_worker_tracking_detection(request):
+    """API endpoint pour le tracking des travailleurs et comptage des franchissements."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        if 'image' not in data:
+            return JsonResponse({'status': 'error', 'message': 'Image requise pour le tracking'}, status=400)
+
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Erreur de décodage image : {e}'}, status=400)
+
+        camera = data.get('camera', 'cam8')
+        reset_state = bool(data.get('reset', False))
+        tracking_detected, confidence, details = detect_worker_tracking_in_frame(
+            frame, camera=camera, reset=reset_state
+        )
+
+        module = _get_module_by_name('tracking', 'objets', 'worker')
+        if module:
+            Detection.objects.create(
+                module=module,
+                confidence=confidence,
+                count=1 if tracking_detected else 0,
+                details={
+                    'worker_tracking_detected': tracking_detected,
+                    'confidence': confidence,
+                    'camera': camera,
+                    'count_in': details.get('count_in', 0),
+                    'count_out': details.get('count_out', 0),
+                    'total_crossings': details.get('total_crossings', 0),
+                    'crossed_ids': details.get('crossed_ids', []),
+                    'crossed_count': details.get('crossed_count', 0),
+                    'tracks': details.get('tracks', []),
+                    'line_start': details.get('line_start'),
+                    'line_end': details.get('line_end'),
+                    'frame_shape': list(map(int, frame.shape)),
+                    'model_version': '1.0.0',
+                    'model_available': details.get('model_available', False),
+                    'processing_method': details.get('processing_method', 'yolo_deepsort_tracking_line_crossing'),
+                },
+            )
+
+            if tracking_detected:
+                Alert.objects.create(
+                    module=module,
+                    severity='warning',
+                    title='Franchissement détecté',
+                    description=(
+                        f"Franchissement de ligne détecté sur {camera.upper()} "
+                        f"(IN={details.get('count_in', 0)} / OUT={details.get('count_out', 0)})"
+                    ),
+                    details={
+                        'confidence': confidence,
+                        'camera': camera,
+                        'event_type': 'worker_tracking',
+                        'count_in': details.get('count_in', 0),
+                        'count_out': details.get('count_out', 0),
+                        'total_crossings': details.get('total_crossings', 0),
+                        'crossed_ids': details.get('crossed_ids', []),
+                        'timestamp': datetime.now().isoformat(),
+                    },
+                )
+
+        return JsonResponse({
+            'status': 'success',
+            'worker_tracking_detected': bool(tracking_detected),
+            'confidence': float(confidence),
+            'details': details,
+            'message': 'Analyse tracking workers terminée',
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur tracking workers : {e}'}, status=500)
+
+
+# ── /api/panic-detection/ — CAM 10 ───────────────────────────────────────────
+
+def api_panic_detection(request):
+    """Detection comportement de panique avec extraction de points cles COCO-17 — CAM 10."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Methode non autorisee'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        if 'image' not in data:
+            return JsonResponse({'status': 'error', 'message': 'Image requise pour la detection de panique'}, status=400)
+
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Erreur de decodage image : {e}'}, status=400)
+
+        camera = data.get('camera', 'cam10')
+        panic_detected, confidence, details = detect_panic_in_frame(frame, camera=camera)
+
+        module = get_module_by_slug('posture')
+        if module:
+            Detection.objects.create(
+                module=module,
+                confidence=confidence,
+                count=1 if panic_detected else 0,
+                details={
+                    'panic_detected': panic_detected,
+                    'label': details.get('label', 'NORMAL'),
+                    'confidence': confidence,
+                    'camera': camera,
+                    'p_panic': details.get('p_panic', 0.0),
+                    'p_normal': details.get('p_normal', 1.0),
+                    'frames_collected': details.get('frames_collected', 0),
+                    'persons_detected': details.get('persons_detected', 0),
+                    'frame_shape': list(map(int, frame.shape)),
+                    'model_version': '1.0.0',
+                    'model_available': details.get('model_available', False),
+                },
+            )
+
+            if panic_detected:
+                Alert.objects.create(
+                    module=module,
+                    severity='critical',
+                    title='Comportement de panique detecte !',
+                    description=f'Panique detectee sur {camera.upper()} (confiance {confidence:.2%})',
+                    details={
+                        'confidence': confidence,
+                        'camera': camera,
+                        'p_panic': details.get('p_panic', 0.0),
+                        'event_type': 'panic',
+                        'timestamp': datetime.now().isoformat(),
+                    },
+                )
+
+        return JsonResponse({
+            'status': 'success',
+            'panic_detected': bool(panic_detected),
+            'label': details.get('label', 'NORMAL'),
+            'confidence': float(confidence),
+            'details': details,
+            'model_available': details.get('model_available', False),
+            'message': 'Analyse panique terminee',
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur detection panique : {e}'}, status=500)

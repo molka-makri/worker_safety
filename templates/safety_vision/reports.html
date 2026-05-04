@@ -980,6 +980,7 @@
   </section>
 </div>
 
+<<<<<<< HEAD
 <script>
   function getRows() {
     return JSON.parse(document.getElementById('report-export-data').textContent || '[]');
@@ -1002,4 +1003,61 @@
     dl('safevision-rapport.json', JSON.stringify(getRows(), null, 2), 'application/json;charset=utf-8');
   }
 </script>
+=======
+<section class="panel">
+  <div class="panel-header">
+    <h2>Résumé des performances</h2>
+  </div>
+  <div class="panel-body report-grid">
+    <article class="report-card">
+      <h3>Alertes critiques</h3>
+      <p>{{ critical_alerts }}</p>
+    </article>
+    <article class="report-card">
+      <h3>Alertes totales</h3>
+      <p>{{ total_alerts }}</p>
+    </article>
+    <article class="report-card">
+      <h3>Modules actifs</h3>
+      <p>{{ total_modules }}</p>
+    </article>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Dernières alertes</h2>
+  </div>
+  <div class="panel-body">
+    {% if latest_alerts and latest_alerts|length > 0 %}
+      <div class="alerts-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Heure</th>
+              <th>Module</th>
+              <th>Sévérité</th>
+              <th>Titre</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alert in latest_alerts %}
+              <tr>
+                <td>{{ alert.timestamp|date:'H:i:s' }}</td>
+                <td>{{ alert.module.name }}</td>
+                <td>{{ alert.get_severity_display }}</td>
+                <td>{{ alert.title }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>Aucune alerte disponible pour le moment.</p>
+      </div>
+    {% endif %}
+  </div>
+</section>
+>>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
 {% endblock %}
