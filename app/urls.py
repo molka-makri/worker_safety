@@ -17,6 +17,8 @@ from .views import (
     api_fall_detection_batch,
     api_fatigue_detection,
     api_fatigue_detection_batch,
+    api_ppe_detection,
+    api_sign_detect,
     api_spill_detection,
     api_manhole_detection,
     api_manhole_depth,
@@ -56,6 +58,8 @@ urlpatterns = [
     path('api/fatigue-detection/batch/', api_fatigue_detection_batch, name='api_fatigue_detection_batch'),
 
     # ── API — Détection de risques ─────────────────────────
+    path('api/ppe-detection/', api_ppe_detection, name='api_ppe_detection'),
+    path('api/sign-detect/', api_sign_detect, name='api_sign_detect'),
     path('api/spill-detection/', api_spill_detection, name='api_spill_detection'),
     path('api/manhole-detection/', api_manhole_detection, name='api_manhole_detection'),
     path('api/manhole-depth/', api_manhole_depth, name='api_manhole_depth'),

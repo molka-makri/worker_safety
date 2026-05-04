@@ -1,10 +1,20 @@
 import os
 import time
+import sys
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.models as models
 from PIL import Image
+import numpy as np
+
+# Checkpoints saved with NumPy 2 may reference numpy._core while older NumPy
+# exposes the same internals under numpy.core.
+if not hasattr(np, '_core'):
+    sys.modules.setdefault('numpy._core', np.core)
+    for name in ('multiarray', 'numeric', 'fromnumeric', 'umath'):
+        if hasattr(np.core, name):
+            sys.modules.setdefault(f'numpy._core.{name}', getattr(np.core, name))
 
 # ── Path Configuration ──────────────────────────────────────
 # Points to the root 'models/' folder, exactly like ppe_detector.py

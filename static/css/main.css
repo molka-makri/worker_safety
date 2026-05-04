@@ -508,7 +508,7 @@ html, body {
 .toggle-chip.on {
   border-color: var(--chip-color);
   color: var(--chip-color);
-  background: rgba(var(--chip-rgb), 0.1);
+  background: rgba(var(--chip-rgb, 74, 227, 181), 0.1);
 }
 
 .alerts-panel {
