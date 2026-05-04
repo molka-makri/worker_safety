@@ -32,21 +32,6 @@ from .panic_detector import detect_panic_in_frame
 from .worker_tracking_detector import detect_worker_tracking_in_frame
 
 MODULE_SLUG_MAP = {
-<<<<<<< HEAD
-    'ppe':        'PPE',
-    'posture':    'Posture',
-    'fatigue':    'Fatigue',
-    'incapacity': 'Fatigue',
-    'falling':    'Fatigue',
-    'fall':       'Fatigue',
-    'tracking':   'Tracking',
-    'hazards':    'Hazards',
-    'spill':      'Hazards',
-    'manhole':    'Hazards',
-    'blocked-exit': 'Hazards',
-    'fire':       'Fire',
-    'machinery':  'Machinery',
-=======
     'ppe': {
         'id': 1,
         'keywords': ('epi', 'ppe', 'signalisation', 'conformite'),
@@ -111,7 +96,6 @@ MODULE_SLUG_MAP = {
         'color': '#E040FB',
     },
     'proximity': {'alias': 'machinery'},
->>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
 }
 
 MODULE_PAGE_CONFIG = {
@@ -755,7 +739,6 @@ class ReportsView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-<<<<<<< HEAD
         modules = list(Module.objects.order_by('id'))
         detections = Detection.objects.select_related('module').order_by('-timestamp')
         alerts = Alert.objects.select_related('module').order_by('-timestamp')
@@ -849,18 +832,6 @@ class ReportsView(TemplateView):
                 'risk_focus': top_module['short_name'] if top_module else 'N/A',
             },
         })
-=======
-        modules = Module.objects.all()
-        alerts = Alert.objects.order_by('-timestamp')[:10]
-        context['app_name'] = 'Rapports SafeVision'
-        context['modules'] = modules
-        context['alerts'] = alerts
-        context['total_modules'] = modules.count()
-        context['total_alerts'] = Alert.objects.count()
-        context['critical_alerts'] = Alert.objects.filter(severity='critical').count()
-        context['total_detections'] = Detection.objects.count()
-        context['latest_alerts'] = alerts
->>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
         return context
 
 
