@@ -26,6 +26,7 @@ from .ppe_detector import detect_ppe_in_frame
 from .sign_detector import detect_sign_in_image
 from .posture_detector import detect_posture_in_frame
 from .panic_detector import detect_panic_in_frame
+from .worker_tracking_detector import detect_worker_tracking_in_frame
 
 MODULE_SLUG_MAP = {
     'ppe': {
@@ -398,8 +399,12 @@ class ModuleDetailView(TemplateView):
             is_spill = 'spill_detected' in details
             is_manhole = 'manhole_detected' in details
             is_blocked_exit = 'blocked_exit_detected' in details
+            is_ppe_violation = 'ppe_violation' in details
+            is_sign_defect = 'sign_defect_detected' in details or 'is_defective' in details
+            is_proximity = 'proximity_detected' in details
             is_posture = 'posture_unsafe' in details
             is_panic = 'panic_detected' in details
+            is_worker_tracking = 'worker_tracking_detected' in details
             detected = bool(det.count)
             kind = (
                 'Fatigue' if is_fatigue else
@@ -407,12 +412,26 @@ class ModuleDetailView(TemplateView):
                 'Spill' if is_spill else
                 'Issue Bloquee' if is_blocked_exit else
                 'Manhole' if is_manhole else
+                'PPE Violation' if is_ppe_violation else
+                'Sign Defect' if is_sign_defect else
+                'Proximite' if is_proximity else
                 'Posture' if is_posture else
                 'Panique' if is_panic else
+                'Worker Tracking' if is_worker_tracking else
                 details.get('class', 'Detection')
             )
             source = details.get('camera') or details.get('source') or (
-                'CAM 2' if is_fatigue else 'CAM 1' if is_fall else 'CAM 3' if is_spill else 'CAM 6' if is_blocked_exit else 'CAM 5' if is_manhole else 'CAM 9' if is_posture else 'CAM 10' if is_panic else 'Module'
+                'CAM 2' if is_fatigue else
+                'CAM 1' if is_fall else
+                'CAM 3' if is_spill else
+                'CAM 6' if is_blocked_exit else
+                'CAM 5' if is_manhole else
+                'CAM 4' if is_ppe_violation else
+                'CAM 7' if is_sign_defect else
+                'CAM 8' if is_proximity or is_worker_tracking else
+                'CAM 9' if is_posture else
+                'CAM 10' if is_panic else
+                'Module'
             )
             confidence_pct = int(round((det.confidence or 0) * 100))
             rows.append({
@@ -546,26 +565,38 @@ def _detection_to_event(det):
     is_spill = 'spill_detected' in details
     is_manhole = 'manhole_detected' in details
     is_blocked_exit = 'blocked_exit_detected' in details
-    is_ppe = 'ppe_violation' in details
-    is_sign = 'sign_defect_detected' in details
+    is_ppe_violation = 'ppe_violation' in details
+    is_sign_defect = 'sign_defect_detected' in details or 'is_defective' in details
     is_proximity = 'proximity_detected' in details
     is_posture = 'posture_unsafe' in details
     is_panic = 'panic_detected' in details
+    is_worker_tracking = 'worker_tracking_detected' in details
     event_type = (
         'fatigue' if is_fatigue else
         'fall' if is_fall else
         'spill' if is_spill else
         'manhole' if is_manhole else
         'blocked_exit' if is_blocked_exit else
-        'ppe' if is_ppe else
-        'sign_defect' if is_sign else
+        'ppe_violation' if is_ppe_violation else
+        'sign_defect' if is_sign_defect else
         'proximity' if is_proximity else
         'posture' if is_posture else
         'panic' if is_panic else
+        'worker_tracking' if is_worker_tracking else
         'detection'
     )
     cam = details.get('camera') or details.get('source') or (
-        'cam2' if is_fatigue else 'cam1' if is_fall else 'cam3' if is_spill else 'cam5' if is_manhole else 'cam6' if is_blocked_exit else 'cam4' if is_ppe else 'cam7' if is_sign else 'cam8' if is_proximity else 'cam9' if is_posture else 'cam10' if is_panic else 'module'
+        'cam2' if is_fatigue else
+        'cam1' if is_fall else
+        'cam3' if is_spill else
+        'cam5' if is_manhole else
+        'cam6' if is_blocked_exit else
+        'cam4' if is_ppe_violation else
+        'cam7' if is_sign_defect else
+        'cam8' if is_proximity or is_worker_tracking else
+        'cam9' if is_posture else
+        'cam10' if is_panic else
+        'module'
     )
     return {
         'id': det.id,
@@ -1469,6 +1500,89 @@ def api_posture_detection(request):
         return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Erreur detection posture : {e}'}, status=500)
+
+
+# ── /api/worker-tracking-detection/ ─────────────────────────────────────────
+
+def api_worker_tracking_detection(request):
+    """API endpoint pour le tracking des travailleurs et comptage des franchissements."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        if 'image' not in data:
+            return JsonResponse({'status': 'error', 'message': 'Image requise pour le tracking'}, status=400)
+
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Erreur de décodage image : {e}'}, status=400)
+
+        camera = data.get('camera', 'cam8')
+        reset_state = bool(data.get('reset', False))
+        tracking_detected, confidence, details = detect_worker_tracking_in_frame(
+            frame, camera=camera, reset=reset_state
+        )
+
+        module = _get_module_by_name('tracking', 'objets', 'worker')
+        if module:
+            Detection.objects.create(
+                module=module,
+                confidence=confidence,
+                count=1 if tracking_detected else 0,
+                details={
+                    'worker_tracking_detected': tracking_detected,
+                    'confidence': confidence,
+                    'camera': camera,
+                    'count_in': details.get('count_in', 0),
+                    'count_out': details.get('count_out', 0),
+                    'total_crossings': details.get('total_crossings', 0),
+                    'crossed_ids': details.get('crossed_ids', []),
+                    'crossed_count': details.get('crossed_count', 0),
+                    'tracks': details.get('tracks', []),
+                    'line_start': details.get('line_start'),
+                    'line_end': details.get('line_end'),
+                    'frame_shape': list(map(int, frame.shape)),
+                    'model_version': '1.0.0',
+                    'model_available': details.get('model_available', False),
+                    'processing_method': details.get('processing_method', 'yolo_deepsort_tracking_line_crossing'),
+                },
+            )
+
+            if tracking_detected:
+                Alert.objects.create(
+                    module=module,
+                    severity='warning',
+                    title='Franchissement détecté',
+                    description=(
+                        f"Franchissement de ligne détecté sur {camera.upper()} "
+                        f"(IN={details.get('count_in', 0)} / OUT={details.get('count_out', 0)})"
+                    ),
+                    details={
+                        'confidence': confidence,
+                        'camera': camera,
+                        'event_type': 'worker_tracking',
+                        'count_in': details.get('count_in', 0),
+                        'count_out': details.get('count_out', 0),
+                        'total_crossings': details.get('total_crossings', 0),
+                        'crossed_ids': details.get('crossed_ids', []),
+                        'timestamp': datetime.now().isoformat(),
+                    },
+                )
+
+        return JsonResponse({
+            'status': 'success',
+            'worker_tracking_detected': bool(tracking_detected),
+            'confidence': float(confidence),
+            'details': details,
+            'message': 'Analyse tracking workers terminée',
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur tracking workers : {e}'}, status=500)
 
 
 # ── /api/panic-detection/ — CAM 10 ───────────────────────────────────────────
