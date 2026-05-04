@@ -1513,19 +1513,19 @@ async function analyzePostureFrame(video) {
 
     if (data.status === 'success') {
       const isUnsafe = data.unsafe_posture_detected;
-      const posture  = (data.posture || 'safe').toUpperCase();
+      const posture  = isUnsafe ? 'UNSAFE' : 'SAFE';
       updateCam9Status(posture);
 
       drawPostureOverlay('cam9-overlay-canvas', data.details || {}, video, isUnsafe);
 
       if (isUnsafe) {
-        showPopupNotification(`[CAM9] Posture UNSAFE ${conf}%`, 'warning', false);
+        const conf = Math.round((data.confidence || 0) * 100);
         const now = Date.now();
         if (now - postureLastAlertAt > POSTURE_ALERT_COOLDOWN_MS) {
           postureLastAlertAt = now;
           const reasons = (data.details?.reasons || []).slice(0, 2).join(', ');
-          addAlert('warning', 'Posture', `Posture incorrecte — ${reasons || 'mauvaise position'}`);
-          showPopupNotification(`[CAM9] Posture UNSAFE ${conf}% — ${reasons}`, 'warning');
+          addAlert('warning', 'Posture', `Posture incorrecte — ${reasons || 'mauvaise position'} (${conf}%)`);
+          showPopupNotification(`[CAM9] Posture UNSAFE (${conf}%) — ${reasons}`, 'warning');
         }
       }
 
