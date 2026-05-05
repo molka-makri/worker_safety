@@ -39,6 +39,7 @@ const LIVE_VIDEO_SRC_CAM8 = "/media/tracking_workers.mp4";
 const LIVE_VIDEO_SRC_CAM8_PROXIMITY = "/media/Media_Proximity/vid3.mp4";
 const LIVE_VIDEO_SRC_CAM9 = "/media/posture.mp4";
 const LIVE_VIDEO_SRC_CAM10 = "/media/panic.mp4";
+const LIVE_VIDEO_SRC_CAM12 = "/media/fire.mp4";
 const DASHBOARD_PPE_SPILL_SRC = "/media/ppe_spill.mp4";
 const DASHBOARD_SPILL_FALL_SRC = "/media/spill_fall.mp4";
 const VIDEO_CAPTURE_MAX_WIDTH = 960;
@@ -77,6 +78,8 @@ let cam9DetectionInterval = null; // POSTURE
 let cam9VideoAnalysisActive = false; // POSTURE
 let cam10DetectionInterval = null; // PANIC
 let cam10VideoAnalysisActive = false; // PANIC
+let cam12DetectionInterval = null; // FIRE/SMOKE
+let cam12VideoAnalysisActive = false; // FIRE/SMOKE
 let dashboardHybridInterval = null;
 let dashboardHybridActive = false;
 let dashboardHybridRequestInFlight = false;
@@ -121,6 +124,12 @@ let panicRequestInFlight = false;
 let panicLastAlertAt = 0;
 const PANIC_ANALYSIS_INTERVAL_MS = 800;
 const PANIC_ALERT_COOLDOWN_MS = 6000;
+
+// Fire/Smoke State Variables (CAM 12)
+let fireRequestInFlight = false;
+let fireLastAlertAt = 0;
+const FIRE_ANALYSIS_INTERVAL_MS = 800;
+const FIRE_ALERT_COOLDOWN_MS = 10000;
 
 let cam8RequestInFlight = false;
 let cam8LastAlertAt = 0;
@@ -208,6 +217,7 @@ function clearAllOverlayCanvases() {
     "cam8",
     "cam9",
     "cam10",
+    "cam12",
   ].forEach((id) => clearOverlayCanvas(`${id}-overlay-canvas`));
 }
 
@@ -2413,6 +2423,201 @@ function stopCam10Detection() {
   updateCam10Status("Analyse arretee");
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CAM 12 — FIRE/SMOKE DETECTION
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function updateCam12Status(text) {
+  const el = document.getElementById("cam12-fire-status");
+  if (el) el.textContent = "Detection: " + text;
+}
+
+function drawFireOverlay(canvasId, details, video, fireDetected, smokeDetected) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !video) return;
+  setCanvasSize(canvas, video);
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const isDetected = fireDetected || smokeDetected;
+  const color = fireDetected
+    ? "rgba(255,59,47,0.95)"
+    : smokeDetected
+      ? "rgba(255,184,0,0.95)"
+      : "rgba(74,227,181,0.95)";
+  const conf = Math.round((details.confidence || 0) * 100);
+
+  // Frame border
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+
+  // Background flash on fire
+  if (fireDetected) {
+    ctx.fillStyle = "rgba(255,59,47,0.08)";
+    ctx.fillRect(2, 2, canvas.width - 4, canvas.height - 4);
+  }
+
+  // Draw bounding boxes if available
+  const rect = getContainedVideoRect(canvas, video);
+  if (Array.isArray(details.detections)) {
+    details.detections.forEach((det) => {
+      if (!Array.isArray(det.bbox) || det.bbox.length < 4) return;
+      const [x1, y1, x2, y2] = det.bbox;
+      const rx = rect.x + x1 * rect.scaleX;
+      const ry = rect.y + y1 * rect.scaleY;
+      const rw = (x2 - x1) * rect.scaleX;
+      const rh = (y2 - y1) * rect.scaleY;
+      if (rw <= 0 || rh <= 0) return;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.strokeRect(rx, ry, rw, rh);
+
+      const label = det.class || (det.fire_detected ? "FIRE" : "SMOKE");
+      const detConf = Math.round((det.confidence || 0) * 100);
+      ctx.font = "bold 11px monospace";
+      const tw = ctx.measureText(`${label} ${detConf}%`).width;
+      ctx.fillStyle = color;
+      ctx.fillRect(rx, ry - 20, tw + 12, 20);
+      ctx.fillStyle = "#071014";
+      ctx.fillText(`${label} ${detConf}%`, rx + 6, ry - 6);
+    });
+  }
+
+  // HUD
+  ctx.fillStyle = "rgba(20,20,20,0.82)";
+  ctx.fillRect(8, 8, 260, 60);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(8, 8, 260, 60);
+  ctx.font = "bold 13px monospace";
+  const statusText = fireDetected
+    ? "🔥 FEU DETECTE"
+    : smokeDetected
+      ? "💨 FUMÉE DETECTÉE"
+      : "✓ NORMAL";
+  ctx.fillStyle = color;
+  ctx.fillText(statusText, 14, 28);
+  ctx.font = "10px monospace";
+  ctx.fillStyle = "#ccc";
+  const fireFlag = details.fire_detected ? "FIRE" : "-";
+  const smokeFlag = details.smoke_detected ? "SMOKE" : "-";
+  ctx.fillText(`Fire: ${fireFlag}  Smoke: ${smokeFlag}`, 14, 44);
+  ctx.fillText(`Confiance: ${conf}%`, 14, 58);
+
+  // Confidence bar (bottom strip)
+  const barW = canvas.width - 20;
+  ctx.fillStyle = "rgba(50,50,50,0.7)";
+  ctx.fillRect(10, canvas.height - 18, barW, 10);
+  ctx.fillStyle = color;
+  ctx.fillRect(10, canvas.height - 18, barW * (details.confidence || 0), 10);
+}
+
+async function analyzeCam12Frame(video) {
+  if (!video || video.paused || video.ended) return;
+  if (fireRequestInFlight) return;
+  fireRequestInFlight = true;
+
+  const imageData = captureVideoFrame(video);
+  if (!imageData) {
+    updateCam12Status("Capture impossible");
+    fireRequestInFlight = false;
+    return;
+  }
+  updateCam12Status("Analyse en cours...");
+
+  try {
+    const res = await fetch("/api/fire-detection/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: JSON.stringify({ image: imageData, camera: "cam12" }),
+    });
+    const data = await res.json();
+
+    if (data.status === "success") {
+      const fireDetected = data.fire_detected;
+      const smokeDetected = data.smoke_detected;
+      const isDetected = fireDetected || smokeDetected;
+      const conf = Math.round((data.confidence || 0) * 100);
+
+      const statusText = fireDetected
+        ? `FEU (${conf}%)`
+        : smokeDetected
+          ? `FUMÉE (${conf}%)`
+          : "OK";
+      updateCam12Status(statusText);
+
+      drawFireOverlay(
+        "cam12-overlay-canvas",
+        data.details || {},
+        video,
+        fireDetected,
+        smokeDetected,
+      );
+
+      if (isDetected) {
+        const now = Date.now();
+        if (now - fireLastAlertAt > FIRE_ALERT_COOLDOWN_MS) {
+          fireLastAlertAt = now;
+          const type = fireDetected ? "FEU" : "FUMÉE";
+          const severity = fireDetected ? "critical" : "warning";
+          addAlert(
+            severity,
+            type,
+            `${type} detecte sur CAM12 (${conf}%)`,
+          );
+          showPopupNotification(
+            `[CAM12] ${type} detecte (${conf}%)`,
+            severity,
+          );
+        }
+      }
+
+      _notifyDetection({
+        cam: "cam12",
+        type: "fire",
+        detected: isDetected,
+        confidence: data.confidence,
+        details: data.details || {},
+      });
+    } else {
+      updateCam12Status("Erreur API");
+      clearOverlayCanvas("cam12-overlay-canvas");
+    }
+  } catch (err) {
+    updateCam12Status("Erreur detection");
+    console.error("[SafeVision] fetch cam12 fire:", err);
+  } finally {
+    fireRequestInFlight = false;
+  }
+}
+
+function startCam12Detection(video) {
+  if (!video || cam12DetectionInterval) return;
+  analyzeCam12Frame(video);
+  cam12DetectionInterval = setInterval(
+    () => analyzeCam12Frame(video),
+    FIRE_ANALYSIS_INTERVAL_MS,
+  );
+  cam12VideoAnalysisActive = true;
+  updateCam12Status("Analyse active");
+}
+
+function stopCam12Detection() {
+  if (cam12DetectionInterval) {
+    clearInterval(cam12DetectionInterval);
+    cam12DetectionInterval = null;
+  }
+  cam12VideoAnalysisActive = false;
+  clearOverlayCanvas("cam12-overlay-canvas");
+  updateCam12Status("Analyse arretee");
+}
+
 function loadCam8Video(file) {
   const v = document.getElementById("cam8-video");
   if (!v || !file) return;
@@ -3196,6 +3401,7 @@ function initializeCameras() {
     ["cam8-video", LIVE_VIDEO_SRC_CAM8, updateCam8Status],
     ["cam9-video", LIVE_VIDEO_SRC_CAM9, updateCam9Status],
     ["cam10-video", LIVE_VIDEO_SRC_CAM10, updateCam10Status],
+    ["cam12-video", LIVE_VIDEO_SRC_CAM12, updateCam12Status],
   ].forEach(([id, src, statusFn]) => {
     const v = document.getElementById(id);
     if (v) {
@@ -3264,6 +3470,7 @@ function startCameras() {
   _startCamWithLoop("cam8-video", LIVE_VIDEO_SRC_CAM8, startCam8Detection);
   _startCamWithLoop("cam9-video", LIVE_VIDEO_SRC_CAM9, startCam9Detection);
   _startCamWithLoop("cam10-video", LIVE_VIDEO_SRC_CAM10, startCam10Detection);
+  _startCamWithLoop("cam12-video", LIVE_VIDEO_SRC_CAM12, startCam12Detection);
   _startCamWithLoop(
     "cam11-video",
     LIVE_VIDEO_SRC_CAM8_PROXIMITY,
@@ -3299,6 +3506,7 @@ function stopCameras() {
     ["cam9-video", updateCam9Status, stopCam9Detection],
     ["cam10-video", updateCam10Status, stopCam10Detection],
     ["cam11-video", updateCam11Status, stopCam11Detection],
+    ["cam12-video", updateCam12Status, stopCam12Detection],
   ].forEach(([id, statusFn, stopFn]) => {
     const v = document.getElementById(id);
     if (v) {

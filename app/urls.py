@@ -23,6 +23,7 @@ from .views import (
     api_manhole_detection,
     api_manhole_depth,
     api_blocked_exit_detection,
+    api_fire_detection,
     api_proximity_detection,
     api_proximity_detection_batch,
     api_posture_detection,   # CAM 9 — posture
@@ -69,6 +70,7 @@ urlpatterns = [
     path('api/manhole-detection/', api_manhole_detection, name='api_manhole_detection'),
     path('api/manhole-depth/', api_manhole_depth, name='api_manhole_depth'),
     path('api/blocked-exit-detection/', api_blocked_exit_detection, name='api_blocked_exit_detection'),
+    path('api/fire-detection/', api_fire_detection, name='api_fire_detection'),
 
     # ── API — Détection de Proximité ───────────────────────
     path('api/proximity-detection/', api_proximity_detection, name='api_proximity_detection'),

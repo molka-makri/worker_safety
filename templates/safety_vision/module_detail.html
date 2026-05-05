@@ -1,8 +1,6 @@
-{% extends "safety_vision/base.html" %}
-{% block title %}{{ page_title }} — SafeVision AI{% endblock %}
-{% block page_title %}{{ page_title }}{% endblock %}
-{% block page_subtitle %}{{ page_subtitle }}{% endblock %}
-{% block content %}
+{% extends "safety_vision/base.html" %} {% block title %}{{ page_title }} —
+SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
+{% block page_subtitle %}{{ page_subtitle }}{% endblock %} {% block content %}
 
 <div style="display: flex; gap: 10px; margin-bottom: 16px; align-items: center">
   <button class="btn-control primary" onclick="runModel()">
@@ -39,7 +37,7 @@
       </div>
 
       {% if module_cameras %}
-      <div class="live-grid" id="live-grid" style="padding:12px; gap:10px">
+      <div class="live-grid" id="live-grid" style="padding: 12px; gap: 10px">
         {% for camera in module_cameras %}
         <div class="cam-tile" id="cam-tile-{{ camera.id }}">
           <div class="cam-header">
@@ -47,29 +45,79 @@
             <span>{{ camera.name }}</span>
           </div>
           <div class="cam-feed">
-            <video id="cam{{ camera.id }}-video" class="cam-video" src="{{ camera.source }}" muted loop playsinline preload="auto"></video>
-            <canvas id="cam{{ camera.id }}-overlay-canvas" class="cam-overlay-canvas"></canvas>
-            <div class="cam-video-overlay" id="cam{{ camera.id }}-video-overlay">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-                <span style="font-size:10px; font-family:var(--font-mono);">Fichier: {{ camera.file_label }}</span>
-                <span style="font-size:10px; font-family:var(--font-mono);" id="{{ camera.status_id }}">Detection: en attente...</span>
+            <video
+              id="cam{{ camera.id }}-video"
+              class="cam-video"
+              src="{{ camera.source }}"
+              muted
+              loop
+              playsinline
+              preload="auto"></video>
+            <canvas
+              id="cam{{ camera.id }}-overlay-canvas"
+              class="cam-overlay-canvas"></canvas>
+            <div
+              class="cam-video-overlay"
+              id="cam{{ camera.id }}-video-overlay">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  gap: 10px;
+                  width: 100%;
+                ">
+                <span style="font-size: 10px; font-family: var(--font-mono)"
+                  >Fichier: {{ camera.file_label }}</span
+                >
+                <span
+                  style="font-size: 10px; font-family: var(--font-mono)"
+                  id="{{ camera.status_id }}"
+                  >Detection: en attente...</span
+                >
               </div>
             </div>
           </div>
-          <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
-            <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
+          <div
+            style="
+              padding: 8px 12px;
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+              border-top: 1px solid var(--bg-border);
+            ">
+            <span
+              style="
+                font-size: 9px;
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+              "
+              >MODULES:</span
+            >
             {% for chip in camera.chips %}
-            <span class="toggle-chip on" style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px">{{ chip.label }}</span>
-            {% endfor %}
-            {% if camera.secondary_status_id %}
-            <span style="font-size:10px; font-family:var(--font-mono); margin-left:auto" id="{{ camera.secondary_status_id }}">Detection: en attente...</span>
+            <span
+              class="toggle-chip on"
+              style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px"
+              >{{ chip.label }}</span
+            >
+            {% endfor %} {% if camera.secondary_status_id %}
+            <span
+              style="
+                font-size: 10px;
+                font-family: var(--font-mono);
+                margin-left: auto;
+              "
+              id="{{ camera.secondary_status_id }}"
+              >Detection: en attente...</span
+            >
             {% endif %}
           </div>
         </div>
         {% endfor %}
       </div>
-      {% elif module_slug == 'fatigue' or module_slug == 'fall' or module_slug == 'falling' %}
-      <div class="live-grid" id="live-grid" style="padding:12px; gap:10px">
+      {% elif module_slug == 'fatigue' or module_slug == 'fall' or module_slug
+      == 'falling' %}
+      <div class="live-grid" id="live-grid" style="padding: 12px; gap: 10px">
         <!-- CAM 1 — Détection chute -->
         <div class="cam-tile" id="cam-tile-1">
           <div class="cam-header">
@@ -206,30 +254,103 @@
       </div>
       {% elif module_slug == 'posture' or module_slug == 'comportement' %}
       <!-- ── CAM 9 (Posture, squelette) + CAM 10 (Panic, BiLSTM, sans squelette) ── -->
-      <div class="live-grid" id="live-grid" style="padding:12px; gap:10px; grid-template-columns:1fr 1fr">
-
+      <div
+        class="live-grid"
+        id="live-grid"
+        style="padding: 12px; gap: 10px; grid-template-columns: 1fr 1fr">
         <!-- CAM 9 — Posture Detection -->
         <div class="cam-tile" id="cam-tile-9">
           <div class="cam-header">
             <div class="status-dot active"></div>
             <span>CAM 9 — Posture & Ergonomie</span>
-            <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)">YOLOv8-Pose · SAFE/UNSAFE</span>
+            <span
+              style="
+                margin-left: auto;
+                font-family: var(--font-mono);
+                font-size: 10px;
+                color: var(--text-muted);
+              "
+              >YOLOv8-Pose · SAFE/UNSAFE</span
+            >
           </div>
           <div class="cam-feed">
-            <video id="cam9-video" class="cam-video" src="/media/posture.mp4" muted loop playsinline preload="auto"></video>
-            <canvas id="cam9-overlay-canvas" class="cam-overlay-canvas"></canvas>
+            <video
+              id="cam9-video"
+              class="cam-video"
+              src="/media/posture.mp4"
+              muted
+              loop
+              playsinline
+              preload="auto"></video>
+            <canvas
+              id="cam9-overlay-canvas"
+              class="cam-overlay-canvas"></canvas>
             <div class="cam-video-overlay">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-                <span style="font-size:10px; font-family:var(--font-mono);">posture.mp4</span>
-                <span style="font-size:10px; font-family:var(--font-mono);" id="cam9-posture-status">Détection: en attente…</span>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  gap: 10px;
+                  width: 100%;
+                ">
+                <span style="font-size: 10px; font-family: var(--font-mono)"
+                  >posture.mp4</span
+                >
+                <span
+                  style="font-size: 10px; font-family: var(--font-mono)"
+                  id="cam9-posture-status"
+                  >Détection: en attente…</span
+                >
               </div>
             </div>
           </div>
-          <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
-            <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
-            <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">POSTURE</span>
-            <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">SAFE</span>
-            <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">UNSAFE</span>
+          <div
+            style="
+              padding: 8px 12px;
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+              border-top: 1px solid var(--bg-border);
+            ">
+            <span
+              style="
+                font-size: 9px;
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+              "
+              >MODULES:</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #ff6b00;
+                --chip-rgb: 255, 107, 0;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >POSTURE</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #4ae3b5;
+                --chip-rgb: 74, 227, 181;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >SAFE</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #ff3b2f;
+                --chip-rgb: 255, 59, 47;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >UNSAFE</span
+            >
           </div>
         </div>
 
@@ -238,26 +359,96 @@
           <div class="cam-header">
             <div class="status-dot active"></div>
             <span>CAM 10 — Détection Panique</span>
-            <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)">BiLSTM · 30 frames</span>
+            <span
+              style="
+                margin-left: auto;
+                font-family: var(--font-mono);
+                font-size: 10px;
+                color: var(--text-muted);
+              "
+              >BiLSTM · 30 frames</span
+            >
           </div>
           <div class="cam-feed">
-            <video id="cam10-video" class="cam-video" src="/media/panic.mp4" muted loop playsinline preload="auto"></video>
-            <canvas id="cam10-overlay-canvas" class="cam-overlay-canvas"></canvas>
+            <video
+              id="cam10-video"
+              class="cam-video"
+              src="/media/panic.mp4"
+              muted
+              loop
+              playsinline
+              preload="auto"></video>
+            <canvas
+              id="cam10-overlay-canvas"
+              class="cam-overlay-canvas"></canvas>
             <div class="cam-video-overlay">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-                <span style="font-size:10px; font-family:var(--font-mono);">panic.mp4</span>
-                <span style="font-size:10px; font-family:var(--font-mono);" id="cam10-panic-status">Détection: en attente…</span>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  gap: 10px;
+                  width: 100%;
+                ">
+                <span style="font-size: 10px; font-family: var(--font-mono)"
+                  >panic.mp4</span
+                >
+                <span
+                  style="font-size: 10px; font-family: var(--font-mono)"
+                  id="cam10-panic-status"
+                  >Détection: en attente…</span
+                >
               </div>
             </div>
           </div>
-          <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
-            <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
-            <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">PANIC</span>
-            <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">LSTM</span>
-            <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">CALME</span>
+          <div
+            style="
+              padding: 8px 12px;
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+              border-top: 1px solid var(--bg-border);
+            ">
+            <span
+              style="
+                font-size: 9px;
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+              "
+              >MODULES:</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #ff3b2f;
+                --chip-rgb: 255, 59, 47;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >PANIC</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #00c2ff;
+                --chip-rgb: 0, 194, 255;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >LSTM</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #4ae3b5;
+                --chip-rgb: 74, 227, 181;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >CALME</span
+            >
           </div>
         </div>
-
       </div>
 
       {% else %}
@@ -440,8 +631,7 @@
 
 <div id="toast-container" class="toast-container"></div>
 
-{% endblock %}
-{% block extra_js %}
+{% endblock %} {% block extra_js %}
 <script>
   const MODULE_SLUG = "{{ module_slug }}";
   const MODULE_NAME = "{{ module.name }}";
