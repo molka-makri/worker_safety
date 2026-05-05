@@ -201,11 +201,100 @@
     </div>
   </div>
 
-  <!-- ── CAM 8 — Proximité Homme-Machine ── -->
+  <!-- ── CAM 8 — Worker Tracking / Proximity ── -->
   <div class="cam-tile" id="cam-tile-8">
     <div class="cam-header">
+      <div class="status-dot" style="background:#00C2FF"></div>
+      <span>CAM 8 — Worker Tracking</span>
+      <span style="margin-left:auto; display:flex; gap:8px; align-items:center">
+        <button onclick="document.getElementById('proximity-upload').click()" style="font-size:10px; background:none; border:1px solid var(--bg-border); color:#00C2FF; padding:2px 8px; border-radius:4px; cursor:pointer; font-family:var(--font-mono)">
+          Charger...
+        </button>
+        <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam8-fps">— FPS</span>
+      </span>
+    </div>
+    <div class="cam-feed">
+      <video id="cam8-video" class="cam-video" src="/media/tracking_workers.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="cam8-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam8-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: tracking_workers.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam8-worker-status">Detection: en attente...</span>
+          <span style="display:none" id="cam8-proximity-status">Détection: en attente...</span>
+        </div>
+      </div>
+      <div class="cam-feed-placeholder" id="cam-feed-8" style="display:none">
+        <div style="text-align:center; color:var(--text-muted)">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <p style="font-size:10px; margin-top:8px; font-family:var(--font-mono)">Aucun fichier chargé</p>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
+      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">TRACKING</span>
+      <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">WORKERS</span>
+      <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">COUNTING</span>
+      <span class="toggle-chip on" style="--chip-color:#E040FB;--chip-rgb:224,64,251; font-size:9px; padding:2px 6px">PROXIMITY</span>
+      <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">MACHINE</span>
+    </div>
+  </div>
+
+  <!-- ── CAM 9 — Posture Detection (flux direct) ── -->
+  <div class="cam-tile" id="cam-tile-9">
+    <div class="cam-header">
+      <div class="status-dot active"></div>
+      <span>CAM 9 — Posture & Ergonomie</span>
+      <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam9-fps">— FPS</span>
+    </div>
+    <div class="cam-feed">
+      <video id="cam9-video" class="cam-video" src="/media/posture.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="cam9-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam9-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: posture.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam9-posture-status">Détection: en attente…</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
+      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">POSTURE</span>
+      <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">SAFE</span>
+      <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">UNSAFE</span>
+    </div>
+  </div>
+
+  <!-- ── CAM 10 — Panic Detection (flux direct, pas de squelette) ── -->
+  <div class="cam-tile" id="cam-tile-10">
+    <div class="cam-header">
+      <div class="status-dot active"></div>
+      <span>CAM 10 — Détection Panique</span>
+      <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)" id="cam10-fps">— FPS</span>
+    </div>
+    <div class="cam-feed">
+      <video id="cam10-video" class="cam-video" src="/media/panic.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="cam10-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam10-video-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
+          <span style="font-size:10px; font-family:var(--font-mono);">Fichier: panic.mp4</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam10-panic-status">Détection: en attente…</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
+      <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES ACTIFS:</span>
+      <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">PANIC</span>
+      <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">LSTM</span>
+      <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">NORMAL</span>
+    </div>
+  </div>
+
+  <!-- ── CAM 11 — Proximité Homme-Machine ── -->
+  <div class="cam-tile" id="cam-tile-11">
+    <div class="cam-header">
       <div class="status-dot" style="background:var(--accent-blue)"></div>
-      <span>CAM 8 — Proximité Homme-Machine</span>
+      <span>CAM 11 — Proximité Homme-Machine</span>
       <span style="margin-left:auto">
         <button onclick="document.getElementById('proximity-upload').click()" style="font-size:10px; background:none; border:1px solid var(--bg-border); color:var(--accent-blue); padding:2px 8px; border-radius:4px; cursor:pointer; font-family:var(--font-mono)">
           Charger...
@@ -213,15 +302,15 @@
       </span>
     </div>
     <div class="cam-feed">
-      <video id="cam8-video" class="cam-video" src="/media/Media_Proximity/vid3.mp4" autoplay muted loop playsinline preload="auto"></video>
-      <canvas id="cam8-overlay-canvas" class="cam-overlay-canvas"></canvas>
-      <div class="cam-video-overlay" id="cam8-video-overlay">
+      <video id="cam11-video" class="cam-video" src="/media/Media_Proximity/vid3.mp4" autoplay muted loop playsinline preload="auto"></video>
+      <canvas id="cam11-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="cam-video-overlay" id="cam11-video-overlay">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
           <span style="font-size:10px; font-family:var(--font-mono);">Fichier: vid3.mp4</span>
-          <span style="font-size:10px; font-family:var(--font-mono);" id="cam8-proximity-status">Détection: en attente...</span>
+          <span style="font-size:10px; font-family:var(--font-mono);" id="cam11-proximity-status">Détection: en attente...</span>
         </div>
       </div>
-      <div class="cam-feed-placeholder" id="cam-feed-8" style="display:none">
+      <div class="cam-feed-placeholder" id="cam-feed-11" style="display:none">
         <div style="text-align:center; color:var(--text-muted)">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           <p style="font-size:10px; margin-top:8px; font-family:var(--font-mono)">Aucun fichier chargé</p>
@@ -238,25 +327,25 @@
 
 </div> <!-- End of live-grid -->
 
-<input type="file" id="proximity-upload" style="display:none" accept="video/*" onchange="loadCam8Video(this.files[0])">
+<input type="file" id="proximity-upload" style="display:none" accept="video/*" onchange="loadCam11Video(this.files[0])">
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const video = document.getElementById('cam8-video');
+    const video = document.getElementById('cam11-video');
     if (!video) return;
     video.src = '/media/Media_Proximity/vid3.mp4';
     video.muted = true;
     video.loop = true;
     video.playsInline = true;
     video.play().catch(() => {});
-    if (typeof startCam8Detection === 'function') {
-      startCam8Detection(video);
+    if (typeof startCam11Detection === 'function') {
+      startCam11Detection(video);
     }
 
-    const placeholder = document.getElementById('cam-feed-8');
+    const placeholder = document.getElementById('cam-feed-11');
     if (placeholder) placeholder.style.display = 'none';
 
-    const overlayLabel = document.querySelector('#cam8-video-overlay span');
+    const overlayLabel = document.querySelector('#cam11-video-overlay span');
     if (overlayLabel) overlayLabel.textContent = 'Fichier: vid3.mp4';
   });
 </script>
