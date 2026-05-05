@@ -88,7 +88,7 @@ const WORKER_TRACKING_ALERT_COOLDOWN_MS = 9000;
 // Proximity State Variables
 let proximityRequestInFlight = false;
 let proximityLastAlertAt = 0;
-const PROXIMITY_ANALYSIS_INTERVAL_MS = 1000;
+const PROXIMITY_ANALYSIS_INTERVAL_MS = 1500;
 const PROXIMITY_ALERT_COOLDOWN_MS = 10000;
 let cam8ProximityDetectionInterval = null;
 let cam8ProximityVideoAnalysisActive = false;

@@ -322,11 +322,24 @@ MODULE_PAGE_CONFIG.update({
         'cameras': [],
     },
     'machinery': {
-        'page_title': 'Machines & Proximite',
-        'page_subtitle': 'Detection de proximite homme-machine',
-        'description': 'Surveillance des zones dangereuses autour des machines.',
-        'cameras': [],
-    },
+    'page_title': 'Machines & Proximite',
+    'page_subtitle': 'Detection de proximite homme-machine — YOLO11l',
+    'description': 'Surveillance des zones dangereuses autour des machines. Detection en temps reel de la distance ouvrier-engin avec alertes critiques.',
+    'cameras': [
+        {
+            'id': 11,
+            'name': 'CAM 11 - Proximite Homme-Machine',
+            'source': '/media/Media_Proximity/vid3.mp4',
+            'file_label': 'vid3.mp4',
+            'status_id': 'cam11-proximity-status',
+            'chips': [
+                {'label': 'WORKER',    'color': '#4AE3B5', 'rgb': '74,227,181'},
+                {'label': 'MACHINE',   'color': '#FF6B00', 'rgb': '255,107,0'},
+                {'label': 'PROXIMITY', 'color': '#E040FB', 'rgb': '224,64,251'},
+            ],
+        },
+    ],
+},
 })
 MODULE_PAGE_CONFIG['spill'] = MODULE_PAGE_CONFIG['hazards']
 MODULE_PAGE_CONFIG['manhole'] = MODULE_PAGE_CONFIG['hazards']
@@ -1562,6 +1575,7 @@ def api_proximity_detection(request):
             return JsonResponse({'status': 'error', 'message': 'Image requise'}, status=400)
         try:
             frame = _decode_image(data['image'])
+
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': f'Décodage: {e}'}, status=400)
 
@@ -1632,96 +1646,8 @@ def api_proximity_detection(request):
         return JsonResponse({'status':'error','message':'JSON invalide'},status=400)
     except Exception as e:
         return JsonResponse({'status':'error','message':str(e)},status=500)
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
 
-    try:
-        data = json.loads(request.body)
 
-        if 'image' not in data:
-            return JsonResponse(
-                {'status': 'error', 'message': 'Image requise'}, status=400)
-
-        try:
-            frame = _decode_image(data['image'])
-        except Exception as e:
-            return JsonResponse(
-                {'status': 'error', 'message': f'Erreur décodage : {e}'}, status=400)
-
-        # ── Détection ────────────────────────────────────────────────────────
-        from .proximity_detector import proximity_detector as _pd
-        proximity_detected, confidence, details = _pd.detect_proximity(frame)
-
-        # ── Annotation visuelle ───────────────────────────────────────────────
-        annotated = _pd.annotate_frame(frame.copy(), details)
-        _, buf     = cv2.imencode('.jpg', annotated,
-                                  [cv2.IMWRITE_JPEG_QUALITY, 88])
-        annotated_b64 = ('data:image/jpeg;base64,'
-                         + base64.b64encode(buf).decode('utf-8'))
-
-        # ── Persistance ───────────────────────────────────────────────────────
-        incidents = details.get('incident_logs', [])
-        module    = _get_module_by_name('machinery', 'proximity')
-        if module:
-            capture_meta = _save_detection_capture(
-                frame, 'proximity', data.get('camera', 'cam8'), confidence, details, 'PROXIMITE'
-            ) if proximity_detected else {}
-            Detection.objects.create(
-                module     = module,
-                confidence = confidence,
-                count      = len(incidents),
-                details    = {
-                    'proximity_detected': proximity_detected,
-                    'confidence'        : confidence,
-                    'camera'            : data.get('camera', 'cam8'),
-                    'workers_count'     : details.get('workers_count', 0),
-                    'machines_count'    : details.get('machines_count', 0),
-                    'incidents'         : len(incidents),
-                },
-            )
-            if proximity_detected and incidents:
-                sev  = incidents[0].get('severity', 'alert')
-                dist = incidents[0].get('distance_m', 0)
-                Alert.objects.create(
-                    module      = module,
-                    severity    = sev,
-                    title       = f'Proximité dangereuse ! ({dist:.1f}m)',
-                    description = (f'Ouvrier à {dist:.1f}m d\'un engin'),
-                    details     = {
-                        'distance'  : dist,
-                        'severity'  : sev,
-                        'camera'    : data.get('camera', 'CAM 8'),
-                        'event_type': 'proximity',
-                        'timestamp' : datetime.now().isoformat(),
-                    },
-                )
-
-        # ── Sévérité maximale ─────────────────────────────────────────────────
-        order = ['safe', 'vigilance', 'alert', 'critical']
-        top   = max(
-            [i.get('severity', 'safe') for i in incidents],
-            key=lambda s: order.index(s) if s in order else 0,
-            default='safe'
-        )
-
-        return JsonResponse({
-            'status'            : 'success',
-            'proximity_detected': bool(proximity_detected),
-            'confidence'        : round(float(confidence), 3),
-            'annotated_image'   : annotated_b64,
-            'details'           : {
-                'workers_count' : details.get('workers_count', 0),
-                'machines_count': details.get('machines_count', 0),
-                'severity'      : top,
-                'incidents_count': len(incidents),
-                'incident_logs' : incidents,
-            },
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'JSON invalide'}, status=400)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 @csrf_exempt
 def api_proximity_detection_batch(request):
     """API endpoint pour traiter plusieurs images en batch (proximité)."""
