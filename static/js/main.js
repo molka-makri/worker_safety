@@ -1748,19 +1748,12 @@ async function analyzeProximityFrame(video, cameraId) {
   proximityRequestInFlight = true;
 
   const imageData = captureVideoFrame(video);
-  const canvasId  = `${cameraId}-overlay-canvas`;
-
-  // Status selon la caméra
-  const updateStatus = cameraId === 'cam11'
-    ? updateCam11Status
-    : updateCam8ProximityStatus;
-
   if (!imageData) {
-    updateStatus('Capture impossible');
+    updateCam8Status('Capture impossible');
     proximityRequestInFlight = false;
     return;
   }
-  updateStatus('Analyse en cours…');
+  updateCam8Status('Analyse en cours…');
 
   try {
     const res = await fetch('/api/proximity-detection/', {
@@ -1784,55 +1777,52 @@ async function analyzeProximityFrame(video, cameraId) {
       let statusTxt = `OK (${nW}W ${nM}M)`;
       if (inc.length > 0) {
         const minDist = Math.min(...inc.map(i => i.distance_m || 99));
-        const labels  = {
-          critical : 'CRITIQUE',
-          alert    : 'ALERTE',
-          vigilance: 'VIGILANCE',
-        };
+        const labels  = { critical:'CRITIQUE', alert:'ALERTE',
+                          vigilance:'VIGILANCE' };
         statusTxt = `${labels[sev]||'OK'} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
       }
-      updateStatus(statusTxt);
+      updateCam8Status(statusTxt);
 
-      // ── Image annotée côté serveur ─────────────────────────────
+      // ── Image annotée (générée côté serveur) ──────────────────
       if (data.annotated_image) {
-        const canvas = document.getElementById(canvasId);
+        const canvas = document.getElementById('cam8-overlay-canvas');
         if (canvas) {
-          canvas.style.position    = 'absolute';
-          canvas.style.top         = '0';
-          canvas.style.left        = '0';
-          canvas.style.width       = '100%';
-          canvas.style.height      = '100%';
-          canvas.style.zIndex      = '10';
+          // Forcer le canvas exactement sur la vidéo
+          canvas.style.position = 'absolute';
+          canvas.style.top      = '0';
+          canvas.style.left     = '0';
+          canvas.style.width    = '100%';
+          canvas.style.height   = '100%';
+          canvas.style.zIndex   = '10';
           canvas.style.pointerEvents = 'none';
 
           canvas.width  = video.videoWidth  || video.clientWidth  || 640;
           canvas.height = video.videoHeight || video.clientHeight || 360;
 
-          const img  = new Image();
-          img.onload = () => {
+          const img    = new Image();
+          img.onload   = () => {
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           };
-          img.onerror = () => console.warn(`[${cameraId}] Image annotée non chargée`);
-          img.src = data.annotated_image;
+          img.onerror  = () => console.warn('[CAM8] Image annotée non chargée');
+          img.src      = data.annotated_image;
         }
       } else {
-        clearOverlayCanvas(canvasId);
+        clearOverlayCanvas('cam8-overlay-canvas');
       }
 
-      // ── Alerte ────────────────────────────────────────────────
+      // ── Alerte popup + feed ───────────────────────────────────
       const now      = Date.now();
       const canAlert = now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS;
       if (data.proximity_detected && canAlert && inc.length > 0) {
         proximityLastAlertAt = now;
         const minDist = Math.min(...inc.map(i => i.distance_m || 99));
         const lvl     = sev === 'critical' ? 'critical' : 'warning';
-        addAlert(lvl, 'Proximite',
-          `Proximite dangereuse detectee (${minDist.toFixed(1)}m)`);
+        addAlert(lvl, 'Proximité',
+          `Proximité dangereuse détectée (${minDist.toFixed(1)}m)`);
         showPopupNotification(
-          `[${cameraId.toUpperCase()}] Proximite dangereuse (${minDist.toFixed(1)}m)`,
-          lvl);
+          `[CAM8] Proximité dangereuse (${minDist.toFixed(1)}m)`, lvl);
       }
 
       _notifyDetection({
@@ -1844,13 +1834,13 @@ async function analyzeProximityFrame(video, cameraId) {
       });
 
     } else {
-      updateStatus('Erreur API');
-      clearOverlayCanvas(canvasId);
+      updateCam8Status('Erreur API');
+      clearOverlayCanvas('cam8-overlay-canvas');
     }
 
   } catch (err) {
-    updateStatus('Erreur detection');
-    console.error(`[SafeVision] ${cameraId} proximity:`, err);
+    updateCam8Status('Erreur détection');
+    console.error('[SafeVision] CAM8 proximity:', err);
   } finally {
     proximityRequestInFlight = false;
   }
@@ -1893,71 +1883,87 @@ async function analyzeCam11Frame(video, options = {}) {
   proximityRequestInFlight = true;
 
   const imageData = captureVideoFrame(video);
-  const canvasId = 'cam11-overlay-canvas';
+  const canvasId  = 'cam11-overlay-canvas';
 
   if (!imageData) {
     updateCam11Status('Capture impossible');
     proximityRequestInFlight = false;
     return;
   }
-  updateCam11Status('Analyse en cours…');
+  updateCam11Status('Analyse en cours...');
 
   try {
     const res = await fetch('/api/proximity-detection/', {
-      method: 'POST',
+      method : 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie('csrftoken'),
+        'X-CSRFToken'  : getCookie('csrftoken'),
       },
       body: JSON.stringify({ image: imageData, camera: 'cam11' }),
     });
     const data = await res.json();
 
     if (data.status === 'success') {
-      const result = data.data || {};
-      const proximity_detected = result.proximity_detected || false;
-      const minDist = result.min_distance || 0;
+      const det = data.details || {};
+      const nW  = det.workers_count  || 0;
+      const nM  = det.machines_count || 0;
+      const sev = det.severity       || 'safe';
+      const inc = det.incident_logs  || [];
 
-      updateCam11Status(
-        proximity_detected
-          ? `Proximité dangereuse (${minDist.toFixed(1)}m)`
-          : `Sécurisé (${minDist.toFixed(1)}m)`,
-      );
+      let statusTxt = `OK (${nW}W ${nM}M)`;
+      if (inc.length > 0) {
+        const minDist = Math.min(...inc.map(i => i.distance_m || 99));
+        const labels  = { critical:'CRITIQUE', alert:'ALERTE', vigilance:'VIGILANCE' };
+        statusTxt = `${labels[sev]||'OK'} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
+      }
+      updateCam11Status(statusTxt);
 
-      // Draw proximity overlay
-      const canvas = document.getElementById(canvasId);
-      if (canvas && result.annotated_image) {
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        img.onload = () => {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0);
-        };
-        img.src = 'data:image/jpeg;base64,' + result.annotated_image;
+      if (data.annotated_image) {
+        const canvas = document.getElementById(canvasId);
+        if (canvas) {
+          canvas.style.position     = 'absolute';
+          canvas.style.top          = '0';
+          canvas.style.left         = '0';
+          canvas.style.width        = '100%';
+          canvas.style.height       = '100%';
+          canvas.style.zIndex       = '10';
+          canvas.style.pointerEvents = 'none';
+          canvas.width  = video.videoWidth  || video.clientWidth  || 640;
+          canvas.height = video.videoHeight || video.clientHeight || 360;
+          const img    = new Image();
+          img.onload   = () => {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          };
+          img.onerror = () => console.warn('[CAM11] Image annotee non chargee');
+          img.src = data.annotated_image;
+        }
+      } else {
+        clearOverlayCanvas(canvasId);
       }
 
-      const now = Date.now();
+      const now      = Date.now();
       const canAlert = now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS;
-      if (proximity_detected && canAlert) {
+      if (data.proximity_detected && canAlert && inc.length > 0) {
         proximityLastAlertAt = now;
-        addAlert(
-          'danger',
-          'Proximité',
-          `Proximité dangereuse détectée sur CAM 11`,
-        );
-        showPopupNotification(
-          `[CAM 11] Proximité dangereuse (${minDist.toFixed(1)}m)`,
-          'danger',
-        );
+        const minDist = Math.min(...inc.map(i => i.distance_m || 99));
+        const lvl     = sev === 'critical' ? 'critical' : 'warning';
+        addAlert(lvl, 'Proximite', `Proximite dangereuse detectee (${minDist.toFixed(1)}m)`);
+        showPopupNotification(`[CAM11] Proximite dangereuse (${minDist.toFixed(1)}m)`, lvl);
       }
+
+      _notifyDetection({
+        cam: 'cam11', type: 'proximity',
+        detected: data.proximity_detected, confidence: data.confidence, details: data.details,
+      });
+
     } else {
       updateCam11Status('Erreur API');
       clearOverlayCanvas(canvasId);
     }
   } catch (err) {
-    updateCam11Status('Erreur détection');
+    updateCam11Status('Erreur detection');
     console.error('[SafeVision] CAM11 proximity:', err);
   } finally {
     proximityRequestInFlight = false;
