@@ -30,9 +30,12 @@ from .sign_detector import detect_sign_in_image
 from .posture_detector import detect_posture_in_frame
 from .panic_detector import detect_panic_in_frame
 from .worker_tracking_detector import detect_worker_tracking_in_frame
+from decouple import config
+import requests
+from django.views.decorators.csrf import csrf_exempt
 
 MODULE_SLUG_MAP = {
-<<<<<<< HEAD
+
     'ppe':        'PPE',
     'posture':    'Posture',
     'fatigue':    'Fatigue',
@@ -46,7 +49,7 @@ MODULE_SLUG_MAP = {
     'blocked-exit': 'Hazards',
     'fire':       'Fire',
     'machinery':  'Machinery',
-=======
+    'proximity':  'Proximity',
     'ppe': {
         'id': 1,
         'keywords': ('epi', 'ppe', 'signalisation', 'conformite'),
@@ -111,7 +114,7 @@ MODULE_SLUG_MAP = {
         'color': '#E040FB',
     },
     'proximity': {'alias': 'machinery'},
->>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
+
 }
 
 MODULE_PAGE_CONFIG = {
@@ -755,7 +758,6 @@ class ReportsView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-<<<<<<< HEAD
         modules = list(Module.objects.order_by('id'))
         detections = Detection.objects.select_related('module').order_by('-timestamp')
         alerts = Alert.objects.select_related('module').order_by('-timestamp')
@@ -849,7 +851,7 @@ class ReportsView(TemplateView):
                 'risk_focus': top_module['short_name'] if top_module else 'N/A',
             },
         })
-=======
+
         modules = Module.objects.all()
         alerts = Alert.objects.order_by('-timestamp')[:10]
         context['app_name'] = 'Rapports SafeVision'
@@ -860,7 +862,7 @@ class ReportsView(TemplateView):
         context['critical_alerts'] = Alert.objects.filter(severity='critical').count()
         context['total_detections'] = Detection.objects.count()
         context['latest_alerts'] = alerts
->>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
+
         return context
 
 
@@ -2223,3 +2225,63 @@ def api_panic_detection(request):
         return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Erreur detection panique : {e}'}, status=500)
+    
+
+
+# ── /api/chat/ ──────────────────────────────────────────────────────────────
+@csrf_exempt
+def api_chat(request):
+    """API endpoint pour le chatbot SafeBot (OpenRouter)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        user_message = data.get('message', '')
+
+        if not user_message:
+            return JsonResponse({'status': 'error', 'message': 'Message vide'}, status=400)
+
+        # On lit la clé ICI, avec un défaut vide pour ne pas crasher si elle manque
+        api_key = config('OPENROUTER_API_KEY', default='')
+        
+        if not api_key:
+            return JsonResponse({'status': 'error', 'message': 'Clé API OpenRouter non configurée dans le fichier .env'}, status=500)
+
+        # Appel à l'API OpenRouter
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://127.0.0.1:8000",
+            "X-Title": "SafeVision AI"
+        }
+        
+        system_prompt = """
+        Tu es SafeBot, un assistant expert en santé et sécurité au travail, spécifiquement en Tunisie. 
+        Tu connais parfaitement le Code du Travail tunisien, les normes de la CNAMPH, et les réglementations de l'INORPI.
+        Tu réponds de manière professionnelle, claire et concise. Si on te pose une question hors sujet, 
+        rappelle poliment que tu es spécialisé dans la sécurité au travail en Tunisie.
+        """
+
+        payload = {
+            "model": "meta-llama/llama-3-8b-instruct", 
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        
+        result = response.json()
+        bot_reply = result['choices'][0]['message']['content']
+
+        return JsonResponse({'status': 'success', 'reply': bot_reply})
+
+    except requests.exceptions.RequestException as e:
+        print(f"[SafeBot] OpenRouter API Error: {e}")
+        return JsonResponse({'status': 'error', 'message': 'Erreur de connexion à l\'IA'}, status=500)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur interne : {e}'}, status=500)
