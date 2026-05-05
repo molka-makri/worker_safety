@@ -65,7 +65,11 @@ let cam6VideoAnalysisActive = false;
 
 let cam7DetectionInterval = null; // ADDED SIGN
 let cam7VideoAnalysisActive = false; // ADDED SIGN
-let cam8DetectionInterval = null;
+let cam8FrameLoopToken = 0;
+let cam8RafHandle = null;
+let cam8VideoFrameCallbackHandle = null;
+let cam8LoopVideoRef = null;
+let cam8ResetPending = false;
 let cam8VideoAnalysisActive = false;
 let spillRequestInFlight = {};
 let spillLastAlertAt = {};
@@ -96,7 +100,6 @@ let signRequestInFlight = false;
 let signLastAlertAt = 0;
 const SIGN_ANALYSIS_INTERVAL_MS = 800; // ResNet can be a bit heavier
 const SIGN_ALERT_COOLDOWN_MS = 10000;
-const WORKER_TRACKING_INTERVAL_MS = 250;
 const WORKER_TRACKING_ALERT_COOLDOWN_MS = 9000;
 
 // Proximity State Variables
@@ -192,9 +195,20 @@ function clearOverlayCanvas(canvasId) {
 }
 
 function clearAllOverlayCanvases() {
-  ["main", "fall-spill", "cam1", "cam2", "cam3", "cam4", "cam5", "cam6", "cam7", "cam8", "cam9", "cam10"].forEach((id) =>
-    clearOverlayCanvas(`${id}-overlay-canvas`),
-  );
+  [
+    "main",
+    "fall-spill",
+    "cam1",
+    "cam2",
+    "cam3",
+    "cam4",
+    "cam5",
+    "cam6",
+    "cam7",
+    "cam8",
+    "cam9",
+    "cam10",
+  ].forEach((id) => clearOverlayCanvas(`${id}-overlay-canvas`));
 }
 
 function getContainedVideoRect(canvas, video) {
@@ -1513,7 +1527,9 @@ function drawWorkerTrackingOverlay(canvasId, details, video) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const rect = getContainedVideoRect(canvas, video);
 
-  const lineStart = Array.isArray(details?.line_start) ? details.line_start : null;
+  const lineStart = Array.isArray(details?.line_start)
+    ? details.line_start
+    : null;
   const lineEnd = Array.isArray(details?.line_end) ? details.line_end : null;
 
   if (lineStart && lineEnd) {
@@ -1592,7 +1608,7 @@ async function analyzeCam8Frame(video, options = {}) {
   if (cam8RequestInFlight) return;
   cam8RequestInFlight = true;
 
-  const imageData = captureVideoFrame(video);
+  const imageData = captureVideoFrame(video, 640, 640);
   if (!imageData) {
     updateCam8Status("Capture impossible");
     cam8RequestInFlight = false;
@@ -1600,7 +1616,8 @@ async function analyzeCam8Frame(video, options = {}) {
   }
 
   const firstCallReset = Boolean(options.reset);
-  const loopReset = !firstCallReset && video.currentTime + 0.2 < cam8LastVideoTime;
+  const loopReset =
+    !firstCallReset && video.currentTime + 0.2 < cam8LastVideoTime;
   const shouldReset = firstCallReset || loopReset;
   cam8LastVideoTime = video.currentTime || 0;
 
@@ -1641,7 +1658,8 @@ async function analyzeCam8Frame(video, options = {}) {
       drawWorkerTrackingOverlay("cam8-overlay-canvas", details, video);
 
       const now = Date.now();
-      const canAlert = now - cam8LastAlertAt > WORKER_TRACKING_ALERT_COOLDOWN_MS;
+      const canAlert =
+        now - cam8LastAlertAt > WORKER_TRACKING_ALERT_COOLDOWN_MS;
       if (crossedCount > 0 && canAlert) {
         cam8LastAlertAt = now;
         addAlert(
@@ -1649,7 +1667,10 @@ async function analyzeCam8Frame(video, options = {}) {
           "Tracking",
           `Franchissement detecte sur CAM8 (IN=${countIn} OUT=${countOut})`,
         );
-        showPopupNotification(`[CAM8] Franchissement worker (${conf}%)`, "warning");
+        showPopupNotification(
+          `[CAM8] Franchissement worker (${conf}%)`,
+          "warning",
+        );
       }
 
       _notifyDetection({
@@ -1672,28 +1693,68 @@ async function analyzeCam8Frame(video, options = {}) {
 }
 
 function startCam8Detection(video) {
-  if (!video || cam8DetectionInterval) return;
+  if (!video || cam8VideoAnalysisActive) return;
   cam8VideoAnalysisActive = true;
   cam8RequestInFlight = false;
   cam8LastVideoTime = 0;
-  analyzeCam8Frame(video, { reset: true });
-  cam8DetectionInterval = setInterval(
-    () => analyzeCam8Frame(video),
-    WORKER_TRACKING_INTERVAL_MS,
-  );
-  updateCam8Status("Analyse active");
+  cam8LoopVideoRef = video;
+  cam8ResetPending = true;
+  cam8FrameLoopToken += 1;
+  _clearCam8FrameSchedule();
+  _scheduleNextCam8Frame(video, cam8FrameLoopToken);
+  updateCam8Status("Analyse active (chaque frame)");
 }
 
 function stopCam8Detection() {
-  if (cam8DetectionInterval) {
-    clearInterval(cam8DetectionInterval);
-    cam8DetectionInterval = null;
-  }
   cam8VideoAnalysisActive = false;
   cam8RequestInFlight = false;
   cam8LastVideoTime = 0;
+  cam8ResetPending = false;
+  _clearCam8FrameSchedule();
+  cam8LoopVideoRef = null;
   clearOverlayCanvas("cam8-overlay-canvas");
   updateCam8Status("Analyse arretee");
+}
+
+function _clearCam8FrameSchedule() {
+  if (cam8RafHandle !== null) {
+    cancelAnimationFrame(cam8RafHandle);
+    cam8RafHandle = null;
+  }
+  if (
+    cam8VideoFrameCallbackHandle !== null &&
+    cam8LoopVideoRef &&
+    typeof cam8LoopVideoRef.cancelVideoFrameCallback === "function"
+  ) {
+    cam8LoopVideoRef.cancelVideoFrameCallback(cam8VideoFrameCallbackHandle);
+  }
+  cam8VideoFrameCallbackHandle = null;
+}
+
+function _scheduleNextCam8Frame(video, loopToken) {
+  if (!cam8VideoAnalysisActive || loopToken !== cam8FrameLoopToken) return;
+
+  const analyzeAndContinue = () => {
+    if (!cam8VideoAnalysisActive || loopToken !== cam8FrameLoopToken) return;
+    const reset = cam8ResetPending;
+    cam8ResetPending = false;
+    analyzeCam8Frame(video, { reset }).finally(() => {
+      _scheduleNextCam8Frame(video, loopToken);
+    });
+  };
+
+  if (typeof video.requestVideoFrameCallback === "function") {
+    cam8VideoFrameCallbackHandle = video.requestVideoFrameCallback(() => {
+      cam8VideoFrameCallbackHandle = null;
+      analyzeAndContinue();
+    });
+    return;
+  }
+
+  cam8RafHandle = requestAnimationFrame(() => {
+    cam8RafHandle = null;
+    analyzeAndContinue();
+  });
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1701,15 +1762,15 @@ function stopCam8Detection() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function updateCam8ProximityStatus(text) {
-  const el = document.getElementById('cam8-proximity-status');
-  if (el) el.textContent = 'Détection: ' + text;
+  const el = document.getElementById("cam8-proximity-status");
+  if (el) el.textContent = "Détection: " + text;
 }
 
 function drawProximityOverlay(canvasId, details, video, proximity_detected) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
   setCanvasSize(canvas, video);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const rect = getContainedVideoRect(canvas, video);
 
@@ -1721,19 +1782,19 @@ function drawProximityOverlay(canvasId, details, video, proximity_detected) {
       const ry = rect.y + y1 * rect.scaleY;
       const rw = (x2 - x1) * rect.scaleX;
       const rh = (y2 - y1) * rect.scaleY;
-      let color = 'rgba(74,227,181,0.8)'; // green for worker
-      if (det.label.toLowerCase().includes('machine')) {
-        color = 'rgba(255,107,0,0.8)'; // orange for machine
+      let color = "rgba(74,227,181,0.8)"; // green for worker
+      if (det.label.toLowerCase().includes("machine")) {
+        color = "rgba(255,107,0,0.8)"; // orange for machine
       }
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.strokeRect(rx, ry, rw, rh);
       ctx.fillStyle = color;
-      ctx.font = 'bold 10px monospace';
+      ctx.font = "bold 10px monospace";
       const label = det.label;
       const tw = ctx.measureText(label).width;
       ctx.fillRect(rx, ry - 16, tw + 6, 16);
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = "#fff";
       ctx.fillText(label, rx + 3, ry - 3);
     }
   }
@@ -1746,9 +1807,10 @@ function drawProximityOverlay(canvasId, details, video, proximity_detected) {
       const rx = rect.x + worker_center_x * rect.scaleX;
       const ry = rect.y + worker_center_y * rect.scaleY;
       const radius = alert.distance * 50; // scale for display
-      let color = 'rgba(0,194,255,0.5)'; // blue for vigilance
-      if (alert.severity === 'critical') color = 'rgba(255,59,47,0.5)'; // red
-      else if (alert.severity === 'warning') color = 'rgba(255,184,0,0.5)'; // yellow
+      let color = "rgba(0,194,255,0.5)"; // blue for vigilance
+      if (alert.severity === "critical")
+        color = "rgba(255,59,47,0.5)"; // red
+      else if (alert.severity === "warning") color = "rgba(255,184,0,0.5)"; // yellow
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -1763,48 +1825,47 @@ async function analyzeProximityFrame(video, cameraId) {
   proximityRequestInFlight = true;
 
   const imageData = captureVideoFrame(video);
-  const canvasId  = `${cameraId}-overlay-canvas`;
+  const canvasId = `${cameraId}-overlay-canvas`;
 
   // Status selon la caméra
-  const updateStatus = cameraId === 'cam11'
-    ? updateCam11Status
-    : updateCam8ProximityStatus;
+  const updateStatus =
+    cameraId === "cam11" ? updateCam11Status : updateCam8ProximityStatus;
 
   if (!imageData) {
-    updateStatus('Capture impossible');
+    updateStatus("Capture impossible");
     proximityRequestInFlight = false;
     return;
   }
-  updateStatus('Analyse en cours…');
+  updateStatus("Analyse en cours…");
 
   try {
-    const res = await fetch('/api/proximity-detection/', {
-      method : 'POST',
+    const res = await fetch("/api/proximity-detection/", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken'  : getCookie('csrftoken'),
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
       },
       body: JSON.stringify({ image: imageData, camera: cameraId }),
     });
     const data = await res.json();
 
-    if (data.status === 'success') {
-      const det  = data.details || {};
-      const nW   = det.workers_count   || 0;
-      const nM   = det.machines_count  || 0;
-      const sev  = det.severity        || 'safe';
-      const inc  = det.incident_logs   || [];
+    if (data.status === "success") {
+      const det = data.details || {};
+      const nW = det.workers_count || 0;
+      const nM = det.machines_count || 0;
+      const sev = det.severity || "safe";
+      const inc = det.incident_logs || [];
 
       // ── Statut texte ──────────────────────────────────────────
       let statusTxt = `OK (${nW}W ${nM}M)`;
       if (inc.length > 0) {
-        const minDist = Math.min(...inc.map(i => i.distance_m || 99));
-        const labels  = {
-          critical : 'CRITIQUE',
-          alert    : 'ALERTE',
-          vigilance: 'VIGILANCE',
+        const minDist = Math.min(...inc.map((i) => i.distance_m || 99));
+        const labels = {
+          critical: "CRITIQUE",
+          alert: "ALERTE",
+          vigilance: "VIGILANCE",
         };
-        statusTxt = `${labels[sev]||'OK'} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
+        statusTxt = `${labels[sev] || "OK"} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
       }
       updateStatus(statusTxt);
 
@@ -1812,24 +1873,25 @@ async function analyzeProximityFrame(video, cameraId) {
       if (data.annotated_image) {
         const canvas = document.getElementById(canvasId);
         if (canvas) {
-          canvas.style.position    = 'absolute';
-          canvas.style.top         = '0';
-          canvas.style.left        = '0';
-          canvas.style.width       = '100%';
-          canvas.style.height      = '100%';
-          canvas.style.zIndex      = '10';
-          canvas.style.pointerEvents = 'none';
+          canvas.style.position = "absolute";
+          canvas.style.top = "0";
+          canvas.style.left = "0";
+          canvas.style.width = "100%";
+          canvas.style.height = "100%";
+          canvas.style.zIndex = "10";
+          canvas.style.pointerEvents = "none";
 
-          canvas.width  = video.videoWidth  || video.clientWidth  || 640;
+          canvas.width = video.videoWidth || video.clientWidth || 640;
           canvas.height = video.videoHeight || video.clientHeight || 360;
 
-          const img  = new Image();
+          const img = new Image();
           img.onload = () => {
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext("2d");
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           };
-          img.onerror = () => console.warn(`[${cameraId}] Image annotée non chargée`);
+          img.onerror = () =>
+            console.warn(`[${cameraId}] Image annotée non chargée`);
           img.src = data.annotated_image;
         }
       } else {
@@ -1837,40 +1899,44 @@ async function analyzeProximityFrame(video, cameraId) {
       }
 
       // ── Alerte ────────────────────────────────────────────────
-      const now      = Date.now();
+      const now = Date.now();
       const canAlert = now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS;
       if (data.proximity_detected && canAlert && inc.length > 0) {
         proximityLastAlertAt = now;
-        const minDist = Math.min(...inc.map(i => i.distance_m || 99));
-        const lvl     = sev === 'critical' ? 'critical' : 'warning';
-        addAlert(lvl, 'Proximite',
-          `Proximite dangereuse detectee (${minDist.toFixed(1)}m)`);
+        const minDist = Math.min(...inc.map((i) => i.distance_m || 99));
+        const lvl = sev === "critical" ? "critical" : "warning";
+        addAlert(
+          lvl,
+          "Proximite",
+          `Proximite dangereuse detectee (${minDist.toFixed(1)}m)`,
+        );
         showPopupNotification(
           `[${cameraId.toUpperCase()}] Proximite dangereuse (${minDist.toFixed(1)}m)`,
-          lvl);
+          lvl,
+        );
       }
 
       _notifyDetection({
-        cam       : cameraId,
-        type      : 'proximity',
-        detected  : data.proximity_detected,
+        cam: cameraId,
+        type: "proximity",
+        detected: data.proximity_detected,
         confidence: data.confidence,
-        details   : data.details,
+        details: data.details,
       });
-
     } else {
-      updateStatus('Erreur API');
+      updateStatus("Erreur API");
       clearOverlayCanvas(canvasId);
     }
-
   } catch (err) {
-    updateStatus('Erreur detection');
+    updateStatus("Erreur detection");
     console.error(`[SafeVision] ${cameraId} proximity:`, err);
   } finally {
     proximityRequestInFlight = false;
   }
 }
-function analyzeCam8ProximityFrame(video) { return analyzeProximityFrame(video, 'cam8'); }
+function analyzeCam8ProximityFrame(video) {
+  return analyzeProximityFrame(video, "cam8");
+}
 
 function startCam8ProximityDetection(video) {
   if (!video || cam8ProximityDetectionInterval) return;
@@ -1880,7 +1946,7 @@ function startCam8ProximityDetection(video) {
     () => analyzeCam8ProximityFrame(video),
     PROXIMITY_ANALYSIS_INTERVAL_MS,
   );
-  updateCam8ProximityStatus('Analyse active');
+  updateCam8ProximityStatus("Analyse active");
 }
 
 function stopCam8ProximityDetection() {
@@ -1889,25 +1955,28 @@ function stopCam8ProximityDetection() {
     cam8ProximityDetectionInterval = null;
   }
   cam8ProximityVideoAnalysisActive = false;
-  clearOverlayCanvas('cam8-overlay-canvas');
-  updateCam8ProximityStatus('Analyse arrêtée');
+  clearOverlayCanvas("cam8-overlay-canvas");
+  updateCam8ProximityStatus("Analyse arrêtée");
 }
 
 // CAM 11 — PROXIMITY DETECTION (copie exacte de CAM 8)
-let cam11DetectionInterval      = null; // ADDED PROXIMITY
-let cam11VideoAnalysisActive    = false; // ADDED PROXIMITY
+let cam11DetectionInterval = null; // ADDED PROXIMITY
+let cam11VideoAnalysisActive = false; // ADDED PROXIMITY
 
 function updateCam11Status(text) {
-  const el = document.getElementById('cam11-proximity-status');
-  if (el) el.textContent = 'Détection: ' + text;
+  const el = document.getElementById("cam11-proximity-status");
+  if (el) el.textContent = "Détection: " + text;
 }
 
 async function analyzeCam11Frame(video, options = {}) {
-  if (!video || video.paused || video.ended || !cam11VideoAnalysisActive) return;
-  return analyzeProximityFrame(video, 'cam11');
+  if (!video || video.paused || video.ended || !cam11VideoAnalysisActive)
+    return;
+  return analyzeProximityFrame(video, "cam11");
 }
 
-function analyzeCam11ProximityFrame(video) { return analyzeCam11Frame(video, 'cam11'); }
+function analyzeCam11ProximityFrame(video) {
+  return analyzeCam11Frame(video, "cam11");
+}
 
 function startCam11Detection(video) {
   if (!video || cam11DetectionInterval) return;
@@ -1917,7 +1986,7 @@ function startCam11Detection(video) {
     () => analyzeCam11ProximityFrame(video),
     PROXIMITY_ANALYSIS_INTERVAL_MS,
   );
-  updateCam11Status('Analyse active');
+  updateCam11Status("Analyse active");
 }
 
 function stopCam11Detection() {
@@ -1926,19 +1995,21 @@ function stopCam11Detection() {
     cam11DetectionInterval = null;
   }
   cam11VideoAnalysisActive = false;
-  clearOverlayCanvas('cam11-overlay-canvas');
-  updateCam11Status('Analyse arrêtée');
+  clearOverlayCanvas("cam11-overlay-canvas");
+  updateCam11Status("Analyse arrêtée");
 }
 
 function loadCam11Video(file) {
-  const v = document.getElementById('cam11-video');
+  const v = document.getElementById("cam11-video");
   if (!v || !file) return;
   const url = URL.createObjectURL(file);
   v.src = url;
   v.load();
   v.play().catch(() => {});
-  document.getElementById('cam-feed-11').style.display = 'none';
-  document.getElementById('cam11-video-overlay').querySelector('span').textContent = `Fichier: ${file.name}`;
+  document.getElementById("cam-feed-11").style.display = "none";
+  document
+    .getElementById("cam11-video-overlay")
+    .querySelector("span").textContent = `Fichier: ${file.name}`;
   if (!cam11VideoAnalysisActive) startCam11Detection(v);
 }
 
@@ -1947,41 +2018,49 @@ function loadCam11Video(file) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function updateCam9Status(text) {
-  const el = document.getElementById('cam9-posture-status');
-  if (el) el.textContent = 'Detection: ' + text;
+  const el = document.getElementById("cam9-posture-status");
+  if (el) el.textContent = "Detection: " + text;
 }
 
 // COCO-17 skeleton connections [from, to]
 const POSE_SKELETON = [
-  [0,1],[0,2],[1,3],[2,4],
-  [5,6],
-  [5,7],[7,9],
-  [6,8],[8,10],
-  [5,11],[6,12],
-  [11,12],
-  [11,13],[13,15],
-  [12,14],[14,16],
+  [0, 1],
+  [0, 2],
+  [1, 3],
+  [2, 4],
+  [5, 6],
+  [5, 7],
+  [7, 9],
+  [6, 8],
+  [8, 10],
+  [5, 11],
+  [6, 12],
+  [11, 12],
+  [11, 13],
+  [13, 15],
+  [12, 14],
+  [14, 16],
 ];
 
 function drawPostureOverlay(canvasId, details, video, isUnsafe) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
   setCanvasSize(canvas, video);
-  const ctx  = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const rect = getContainedVideoRect(canvas, video);
 
-  const safeColor   = 'rgba(74,227,181,0.95)';
-  const unsafeColor = 'rgba(255,107,0,0.95)';
-  const color       = isUnsafe ? unsafeColor : safeColor;
-  const conf        = Math.round((details.confidence || 0) * 100);
-  const reasons     = Array.isArray(details.reasons) ? details.reasons : [];
-  const kpts        = Array.isArray(details.keypoints)
+  const safeColor = "rgba(74,227,181,0.95)";
+  const unsafeColor = "rgba(255,107,0,0.95)";
+  const color = isUnsafe ? unsafeColor : safeColor;
+  const conf = Math.round((details.confidence || 0) * 100);
+  const reasons = Array.isArray(details.reasons) ? details.reasons : [];
+  const kpts = Array.isArray(details.keypoints)
     ? details.keypoints
     : Array.isArray(details.skeleton_keypoints)
       ? details.skeleton_keypoints
       : [];
-  const bbox        = Array.isArray(details.bbox) ? details.bbox : null;
+  const bbox = Array.isArray(details.bbox) ? details.bbox : null;
 
   // Bounding box
   if (bbox) {
@@ -1991,16 +2070,16 @@ function drawPostureOverlay(canvasId, details, video, isUnsafe) {
     const rw = (x2 - x1) * rect.scaleX;
     const rh = (y2 - y1) * rect.scaleY;
     ctx.strokeStyle = color;
-    ctx.lineWidth   = 3;
+    ctx.lineWidth = 3;
     ctx.setLineDash([8, 4]);
     ctx.strokeRect(rx, ry, rw, rh);
     ctx.setLineDash([]);
-    const tag = isUnsafe ? '⚠ UNSAFE' : '✓ SAFE';
-    ctx.font = 'bold 11px monospace';
+    const tag = isUnsafe ? "⚠ UNSAFE" : "✓ SAFE";
+    ctx.font = "bold 11px monospace";
     const tw = ctx.measureText(tag).width;
     ctx.fillStyle = color;
     ctx.fillRect(rx, ry - 20, tw + 10, 20);
-    ctx.fillStyle = isUnsafe ? '#000' : '#001014';
+    ctx.fillStyle = isUnsafe ? "#000" : "#001014";
     ctx.fillText(tag, rx + 5, ry - 5);
   }
 
@@ -2009,7 +2088,8 @@ function drawPostureOverlay(canvasId, details, video, isUnsafe) {
     ctx.lineWidth = 2;
     ctx.setLineDash([]);
     POSE_SKELETON.forEach(([a, b]) => {
-      const pa = kpts[a], pb = kpts[b];
+      const pa = kpts[a],
+        pb = kpts[b];
       if (!pa || !pb) return;
       if ((pa[0] === 0 && pa[1] === 0) || (pb[0] === 0 && pb[1] === 0)) return;
       const ax = rect.x + pa[0] * rect.scaleX;
@@ -2017,7 +2097,10 @@ function drawPostureOverlay(canvasId, details, video, isUnsafe) {
       const bx = rect.x + pb[0] * rect.scaleX;
       const by = rect.y + pb[1] * rect.scaleY;
       ctx.strokeStyle = color;
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
     });
     kpts.forEach(([kx, ky], i) => {
       if (kx === 0 && ky === 0) return;
@@ -2025,9 +2108,9 @@ function drawPostureOverlay(canvasId, details, video, isUnsafe) {
       const py = rect.y + ky * rect.scaleY;
       ctx.beginPath();
       ctx.arc(px, py, i === 0 ? 5 : 3, 0, Math.PI * 2);
-      ctx.fillStyle = i === 0 ? '#fff' : color;
+      ctx.fillStyle = i === 0 ? "#fff" : color;
       ctx.fill();
-      ctx.strokeStyle = '#000';
+      ctx.strokeStyle = "#000";
       ctx.lineWidth = 1;
       ctx.stroke();
     });
@@ -2036,17 +2119,19 @@ function drawPostureOverlay(canvasId, details, video, isUnsafe) {
   // HUD (reasons)
   if (reasons.length > 0 || !isUnsafe) {
     const hudH = 22 + Math.min(reasons.length, 4) * 14 + 8;
-    ctx.fillStyle = 'rgba(15,15,15,0.82)';
+    ctx.fillStyle = "rgba(15,15,15,0.82)";
     ctx.fillRect(6, 6, 264, hudH);
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
     ctx.strokeRect(6, 6, 264, hudH);
-    ctx.font = 'bold 11px monospace';
+    ctx.font = "bold 11px monospace";
     ctx.fillStyle = color;
-    ctx.fillText(isUnsafe ? '⚠ UNSAFE' : '✓ SAFE', 12, 22);
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#ddd';
-    reasons.slice(0, 4).forEach((r, i) => ctx.fillText('• ' + r, 12, 36 + i * 14));
+    ctx.fillText(isUnsafe ? "⚠ UNSAFE" : "✓ SAFE", 12, 22);
+    ctx.font = "10px monospace";
+    ctx.fillStyle = "#ddd";
+    reasons
+      .slice(0, 4)
+      .forEach((r, i) => ctx.fillText("• " + r, 12, 36 + i * 14));
   }
 }
 
@@ -2056,46 +2141,68 @@ async function analyzePostureFrame(video) {
   postureRequestInFlight = true;
 
   const imageData = captureVideoFrame(video);
-  if (!imageData) { updateCam9Status('Capture impossible'); postureRequestInFlight = false; return; }
-  updateCam9Status('Analyse en cours...');
+  if (!imageData) {
+    updateCam9Status("Capture impossible");
+    postureRequestInFlight = false;
+    return;
+  }
+  updateCam9Status("Analyse en cours...");
 
   try {
-    const res  = await fetch('/api/posture-detection/', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-      body:    JSON.stringify({ image: imageData, camera: 'cam9' }),
+    const res = await fetch("/api/posture-detection/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: JSON.stringify({ image: imageData, camera: "cam9" }),
     });
     const data = await res.json();
 
-    if (data.status === 'success') {
+    if (data.status === "success") {
       const isUnsafe = data.unsafe_posture_detected;
-      const posture  = isUnsafe ? 'UNSAFE' : 'SAFE';
+      const posture = isUnsafe ? "UNSAFE" : "SAFE";
       updateCam9Status(posture);
 
-      drawPostureOverlay('cam9-overlay-canvas', data.details || {}, video, isUnsafe);
+      drawPostureOverlay(
+        "cam9-overlay-canvas",
+        data.details || {},
+        video,
+        isUnsafe,
+      );
 
       if (isUnsafe) {
         const conf = Math.round((data.confidence || 0) * 100);
         const now = Date.now();
         if (now - postureLastAlertAt > POSTURE_ALERT_COOLDOWN_MS) {
           postureLastAlertAt = now;
-          const reasons = (data.details?.reasons || []).slice(0, 2).join(', ');
-          addAlert('warning', 'Posture', `Posture incorrecte — ${reasons || 'mauvaise position'} (${conf}%)`);
-          showPopupNotification(`[CAM9] Posture UNSAFE (${conf}%) — ${reasons}`, 'warning');
+          const reasons = (data.details?.reasons || []).slice(0, 2).join(", ");
+          addAlert(
+            "warning",
+            "Posture",
+            `Posture incorrecte — ${reasons || "mauvaise position"} (${conf}%)`,
+          );
+          showPopupNotification(
+            `[CAM9] Posture UNSAFE (${conf}%) — ${reasons}`,
+            "warning",
+          );
         }
       }
 
       _notifyDetection({
-        cam: 'cam9', type: 'posture',
-        detected: isUnsafe, confidence: data.confidence, details: data.details || {},
+        cam: "cam9",
+        type: "posture",
+        detected: isUnsafe,
+        confidence: data.confidence,
+        details: data.details || {},
       });
     } else {
-      updateCam9Status('Erreur API');
-      clearOverlayCanvas('cam9-overlay-canvas');
+      updateCam9Status("Erreur API");
+      clearOverlayCanvas("cam9-overlay-canvas");
     }
   } catch (err) {
-    updateCam9Status('Erreur detection');
-    console.error('[SafeVision] fetch cam9 posture:', err);
+    updateCam9Status("Erreur detection");
+    console.error("[SafeVision] fetch cam9 posture:", err);
   } finally {
     postureRequestInFlight = false;
   }
@@ -2104,16 +2211,22 @@ async function analyzePostureFrame(video) {
 function startCam9Detection(video) {
   if (!video || cam9DetectionInterval) return;
   analyzePostureFrame(video);
-  cam9DetectionInterval   = setInterval(() => analyzePostureFrame(video), POSTURE_ANALYSIS_INTERVAL_MS);
+  cam9DetectionInterval = setInterval(
+    () => analyzePostureFrame(video),
+    POSTURE_ANALYSIS_INTERVAL_MS,
+  );
   cam9VideoAnalysisActive = true;
-  updateCam9Status('Analyse active');
+  updateCam9Status("Analyse active");
 }
 
 function stopCam9Detection() {
-  if (cam9DetectionInterval) { clearInterval(cam9DetectionInterval); cam9DetectionInterval = null; }
+  if (cam9DetectionInterval) {
+    clearInterval(cam9DetectionInterval);
+    cam9DetectionInterval = null;
+  }
   cam9VideoAnalysisActive = false;
-  clearOverlayCanvas('cam9-overlay-canvas');
-  updateCam9Status('Analyse arretee');
+  clearOverlayCanvas("cam9-overlay-canvas");
+  updateCam9Status("Analyse arretee");
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2121,61 +2234,64 @@ function stopCam9Detection() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function updateCam10Status(text) {
-  const el = document.getElementById('cam10-panic-status');
-  if (el) el.textContent = 'Detection: ' + text;
+  const el = document.getElementById("cam10-panic-status");
+  if (el) el.textContent = "Detection: " + text;
 }
 
 function drawPanicOverlay(canvasId, details, video, isPanic) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
   setCanvasSize(canvas, video);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const label   = details.label || (isPanic ? 'PANIC' : 'NORMAL');
-  const warming = label === 'WARMING_UP';
-  const possible = label === 'POSSIBLE' || details.possible_panic;
-  const color   = warming ? 'rgba(0,194,255,0.80)'
-                : isPanic ? 'rgba(255,59,47,0.95)'
-                : possible ? 'rgba(255,184,0,0.95)'
-                : 'rgba(74,227,181,0.95)';
-  const conf    = Math.round((details.confidence || 0) * 100);
-  const frames  = details.frames_collected || 0;
-  const needed  = details.frames_needed || 30;
+  const label = details.label || (isPanic ? "PANIC" : "NORMAL");
+  const warming = label === "WARMING_UP";
+  const possible = label === "POSSIBLE" || details.possible_panic;
+  const color = warming
+    ? "rgba(0,194,255,0.80)"
+    : isPanic
+      ? "rgba(255,59,47,0.95)"
+      : possible
+        ? "rgba(255,184,0,0.95)"
+        : "rgba(74,227,181,0.95)";
+  const conf = Math.round((details.confidence || 0) * 100);
+  const frames = details.frames_collected || 0;
+  const needed = details.frames_needed || 30;
 
   // Frame border
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 3;
+  ctx.lineWidth = 3;
   ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
 
   // Background flash on panic
   if (isPanic) {
-    ctx.fillStyle = 'rgba(255,59,47,0.08)';
+    ctx.fillStyle = "rgba(255,59,47,0.08)";
     ctx.fillRect(2, 2, canvas.width - 4, canvas.height - 4);
   }
 
   // HUD BiLSTM (pas de squelette)
-  ctx.fillStyle = 'rgba(20,20,20,0.82)';
+  ctx.fillStyle = "rgba(20,20,20,0.82)";
   ctx.fillRect(8, 8, 270, warming ? 55 : 70);
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 1;
+  ctx.lineWidth = 1;
   ctx.strokeRect(8, 8, 270, warming ? 55 : 70);
-  ctx.font      = 'bold 13px monospace';
+  ctx.font = "bold 13px monospace";
   const statusText = warming
-    ? 'WARMING UP...'
+    ? "WARMING UP..."
     : isPanic
-      ? '🚨 PANIC'
+      ? "🚨 PANIC"
       : possible
-        ? '⚠ POSSIBLE'
-        : '✓ NORMAL';
+        ? "⚠ POSSIBLE"
+        : "✓ NORMAL";
   ctx.fillStyle = color;
   ctx.fillText(statusText, 14, 28);
-  ctx.font      = '10px monospace';
-  ctx.fillStyle = '#ccc';
+  ctx.font = "10px monospace";
+  ctx.fillStyle = "#ccc";
   if (warming) {
     ctx.fillText(`Buffer: ${frames} / ${needed} frames`, 14, 46);
   } else {
-    const pPanic  = Math.round((details.p_panic  || 0) * 100);
+    const pPanic = Math.round((details.p_panic || 0) * 100);
     const pNormal = Math.round((details.p_normal || 0) * 100);
     ctx.fillText(`P(panic)=${pPanic}%   P(normal)=${pNormal}%`, 14, 44);
     ctx.fillText(`Confiance: ${conf}%   Frames: ${frames}`, 14, 58);
@@ -2184,9 +2300,13 @@ function drawPanicOverlay(canvasId, details, video, isPanic) {
   // Confidence bar (bottom strip)
   if (!warming) {
     const barW = canvas.width - 20;
-    ctx.fillStyle = 'rgba(50,50,50,0.7)';
+    ctx.fillStyle = "rgba(50,50,50,0.7)";
     ctx.fillRect(10, canvas.height - 18, barW, 10);
-    ctx.fillStyle = isPanic ? 'rgba(255,59,47,0.90)' : possible ? 'rgba(255,184,0,0.90)' : 'rgba(74,227,181,0.90)';
+    ctx.fillStyle = isPanic
+      ? "rgba(255,59,47,0.90)"
+      : possible
+        ? "rgba(255,184,0,0.90)"
+        : "rgba(74,227,181,0.90)";
     ctx.fillRect(10, canvas.height - 18, barW * (details.confidence || 0), 10);
   }
 }
@@ -2197,49 +2317,76 @@ async function analyzePanicFrame(video) {
   panicRequestInFlight = true;
 
   const imageData = captureVideoFrame(video);
-  if (!imageData) { updateCam10Status('Capture impossible'); panicRequestInFlight = false; return; }
-  updateCam10Status('Analyse en cours...');
+  if (!imageData) {
+    updateCam10Status("Capture impossible");
+    panicRequestInFlight = false;
+    return;
+  }
+  updateCam10Status("Analyse en cours...");
 
   try {
-    const res  = await fetch('/api/panic-detection/', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-      body:    JSON.stringify({ image: imageData, camera: 'cam10' }),
+    const res = await fetch("/api/panic-detection/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: JSON.stringify({ image: imageData, camera: "cam10" }),
     });
     const data = await res.json();
 
-    if (data.status === 'success') {
-      const isPanic  = data.panic_detected;
-      const label    = data.label || 'NORMAL';
-      const conf     = Math.round(data.confidence * 100);
+    if (data.status === "success") {
+      const isPanic = data.panic_detected;
+      const label = data.label || "NORMAL";
+      const conf = Math.round(data.confidence * 100);
       updateCam10Status(`${label} (${conf}%)`);
 
-      drawPanicOverlay('cam10-overlay-canvas', data.details || {}, video, isPanic);
-      if (!isPanic && label === 'POSSIBLE') {
-        showPopupNotification(`[CAM10] PANIC POSSIBLE ${conf}%`, 'warning', false);
+      drawPanicOverlay(
+        "cam10-overlay-canvas",
+        data.details || {},
+        video,
+        isPanic,
+      );
+      if (!isPanic && label === "POSSIBLE") {
+        showPopupNotification(
+          `[CAM10] PANIC POSSIBLE ${conf}%`,
+          "warning",
+          false,
+        );
       }
 
       if (isPanic) {
-        showPopupNotification(`[CAM10] PANIC detecte ${conf}%`, 'critical', false);
+        showPopupNotification(
+          `[CAM10] PANIC detecte ${conf}%`,
+          "critical",
+          false,
+        );
         const now = Date.now();
         if (now - panicLastAlertAt > PANIC_ALERT_COOLDOWN_MS) {
           panicLastAlertAt = now;
-          addAlert('critical', 'Panic', `Comportement de panique detecte sur CAM10 (${conf}%)`);
-          showPopupNotification(`[CAM10] PANIC detecte (${conf}%)`, 'critical');
+          addAlert(
+            "critical",
+            "Panic",
+            `Comportement de panique detecte sur CAM10 (${conf}%)`,
+          );
+          showPopupNotification(`[CAM10] PANIC detecte (${conf}%)`, "critical");
         }
       }
 
       _notifyDetection({
-        cam: 'cam10', type: 'panic',
-        detected: isPanic, confidence: data.confidence, details: data.details || {},
+        cam: "cam10",
+        type: "panic",
+        detected: isPanic,
+        confidence: data.confidence,
+        details: data.details || {},
       });
     } else {
-      updateCam10Status('Erreur API');
-      clearOverlayCanvas('cam10-overlay-canvas');
+      updateCam10Status("Erreur API");
+      clearOverlayCanvas("cam10-overlay-canvas");
     }
   } catch (err) {
-    updateCam10Status('Erreur detection');
-    console.error('[SafeVision] fetch cam10 panic:', err);
+    updateCam10Status("Erreur detection");
+    console.error("[SafeVision] fetch cam10 panic:", err);
   } finally {
     panicRequestInFlight = false;
   }
@@ -2248,27 +2395,35 @@ async function analyzePanicFrame(video) {
 function startCam10Detection(video) {
   if (!video || cam10DetectionInterval) return;
   analyzePanicFrame(video);
-  cam10DetectionInterval   = setInterval(() => analyzePanicFrame(video), PANIC_ANALYSIS_INTERVAL_MS);
+  cam10DetectionInterval = setInterval(
+    () => analyzePanicFrame(video),
+    PANIC_ANALYSIS_INTERVAL_MS,
+  );
   cam10VideoAnalysisActive = true;
-  updateCam10Status('Analyse active');
+  updateCam10Status("Analyse active");
 }
 
 function stopCam10Detection() {
-  if (cam10DetectionInterval) { clearInterval(cam10DetectionInterval); cam10DetectionInterval = null; }
+  if (cam10DetectionInterval) {
+    clearInterval(cam10DetectionInterval);
+    cam10DetectionInterval = null;
+  }
   cam10VideoAnalysisActive = false;
-  clearOverlayCanvas('cam10-overlay-canvas');
-  updateCam10Status('Analyse arretee');
+  clearOverlayCanvas("cam10-overlay-canvas");
+  updateCam10Status("Analyse arretee");
 }
 
 function loadCam8Video(file) {
-  const v = document.getElementById('cam8-video');
+  const v = document.getElementById("cam8-video");
   if (!v || !file) return;
   const url = URL.createObjectURL(file);
   v.src = url;
   v.load();
   v.play().catch(() => {});
-  document.getElementById('cam-feed-8').style.display = 'none';
-  document.getElementById('cam8-video-overlay').querySelector('span').textContent = `Fichier: ${file.name}`;
+  document.getElementById("cam-feed-8").style.display = "none";
+  document
+    .getElementById("cam8-video-overlay")
+    .querySelector("span").textContent = `Fichier: ${file.name}`;
   if (!cam8VideoAnalysisActive) startCam8Detection(v);
 }
 
@@ -2351,7 +2506,9 @@ function updateDashboardFallSpillStatus(text) {
 }
 
 function isModuleEnabled(moduleName) {
-  const chip = document.querySelector(`.module-toggles [data-module="${moduleName}"]`);
+  const chip = document.querySelector(
+    `.module-toggles [data-module="${moduleName}"]`,
+  );
   return !chip || chip.classList.contains("on");
 }
 
@@ -2390,7 +2547,9 @@ function drawDashboardHybridOverlay(video, ppeData, spillData) {
 
   const spillDetails = spillData?.details || {};
   const spillDetected = Boolean(spillData?.spill_detected);
-  const spillPolygons = Array.isArray(spillDetails.polygons) ? spillDetails.polygons : [];
+  const spillPolygons = Array.isArray(spillDetails.polygons)
+    ? spillDetails.polygons
+    : [];
   spillPolygons.forEach((points) => {
     if (!Array.isArray(points) || points.length < 3) return;
     ctx.beginPath();
@@ -2421,7 +2580,9 @@ function drawDashboardHybridOverlay(video, ppeData, spillData) {
 
   const ppeDetails = ppeData?.details || {};
   const violation = Boolean(ppeData?.ppe_violation);
-  const ppeDetections = Array.isArray(ppeDetails.detections) ? ppeDetails.detections : [];
+  const ppeDetections = Array.isArray(ppeDetails.detections)
+    ? ppeDetails.detections
+    : [];
   ppeDetections.forEach((det) => {
     const label = String(det.label || "object").toLowerCase();
     const conf = Math.round((Number(det.confidence) || 0) * 100);
@@ -2434,7 +2595,14 @@ function drawDashboardHybridOverlay(video, ppeData, spillData) {
       stroke = "rgba(255,59,47,0.98)";
       fill = "rgba(255,59,47,0.92)";
     }
-    drawDashboardBox(ctx, rect, det.bbox, stroke, fill, `${label.toUpperCase()} ${conf}%`);
+    drawDashboardBox(
+      ctx,
+      rect,
+      det.bbox,
+      stroke,
+      fill,
+      `${label.toUpperCase()} ${conf}%`,
+    );
   });
 
   const ppePct = Math.round((ppeData?.confidence || 0) * 100);
@@ -2455,7 +2623,10 @@ function drawDashboardHybridOverlay(video, ppeData, spillData) {
     const w = ctx.measureText(badge.text).width + 18;
     ctx.fillStyle = badge.color;
     ctx.fillRect(x, 10, w, 25);
-    ctx.fillStyle = badge.color === "#00C2FF" || badge.color === "#4AE3B5" ? "#001014" : "#fff";
+    ctx.fillStyle =
+      badge.color === "#00C2FF" || badge.color === "#4AE3B5"
+        ? "#001014"
+        : "#fff";
     ctx.fillText(badge.text, x + 9, 27);
     x += w + 8;
   });
@@ -2471,7 +2642,9 @@ function drawDashboardFallSpillOverlay(video, fallData, spillData) {
 
   const spillDetails = spillData?.details || {};
   const spillDetected = Boolean(spillData?.spill_detected);
-  const spillPolygons = Array.isArray(spillDetails.polygons) ? spillDetails.polygons : [];
+  const spillPolygons = Array.isArray(spillDetails.polygons)
+    ? spillDetails.polygons
+    : [];
   spillPolygons.forEach((points) => {
     if (!Array.isArray(points) || points.length < 3) return;
     ctx.beginPath();
@@ -2531,14 +2704,24 @@ function drawDashboardFallSpillOverlay(video, fallData, spillData) {
     const w = ctx.measureText(badge.text).width + 18;
     ctx.fillStyle = badge.color;
     ctx.fillRect(x, 10, w, 25);
-    ctx.fillStyle = badge.color === "#00C2FF" || badge.color === "#4AE3B5" ? "#001014" : "#fff";
+    ctx.fillStyle =
+      badge.color === "#00C2FF" || badge.color === "#4AE3B5"
+        ? "#001014"
+        : "#fff";
     ctx.fillText(badge.text, x + 9, 27);
     x += w + 8;
   });
 }
 
 async function analyzeDashboardHybridFrame(video) {
-  if (!dashboardHybridActive || dashboardHybridRequestInFlight || !video || video.paused || video.ended) return;
+  if (
+    !dashboardHybridActive ||
+    dashboardHybridRequestInFlight ||
+    !video ||
+    video.paused ||
+    video.ended
+  )
+    return;
   const usePPE = isModuleEnabled("ppe");
   const useSpill = isModuleEnabled("hazards");
   if (!usePPE && !useSpill) {
@@ -2560,64 +2743,126 @@ async function analyzeDashboardHybridFrame(video) {
   try {
     const requests = [];
     if (usePPE) {
-      requests.push(fetch("/api/ppe-detection/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
-        body: JSON.stringify({ image: imageData, camera: "dashboard-ppe-spill" }),
-      }).then((res) => res.json()).then((data) => ({ key: "ppe", data })));
+      requests.push(
+        fetch("/api/ppe-detection/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+          body: JSON.stringify({
+            image: imageData,
+            camera: "dashboard-ppe-spill",
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => ({ key: "ppe", data })),
+      );
     }
     if (useSpill) {
-      requests.push(fetch("/api/spill-detection/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
-        body: JSON.stringify({ image: imageData, camera: "dashboard-ppe-spill" }),
-      }).then((res) => res.json()).then((data) => ({ key: "spill", data })));
+      requests.push(
+        fetch("/api/spill-detection/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+          body: JSON.stringify({
+            image: imageData,
+            camera: "dashboard-ppe-spill",
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => ({ key: "spill", data })),
+      );
     }
 
     const responses = await Promise.all(requests);
     const ppe = responses.find((item) => item.key === "ppe")?.data;
     const spill = responses.find((item) => item.key === "spill")?.data;
-    if ((ppe && ppe.status !== "success") || (spill && spill.status !== "success")) {
+    if (
+      (ppe && ppe.status !== "success") ||
+      (spill && spill.status !== "success")
+    ) {
       updateDashboardHybridStatus("Erreur API");
       return;
     }
 
     drawDashboardHybridOverlay(video, ppe, spill);
     dashboardHybridFrameCount += 1;
-    const fps = Math.max(1, Math.round(1000 / Math.max(1, performance.now() - startedAt)));
+    const fps = Math.max(
+      1,
+      Math.round(1000 / Math.max(1, performance.now() - startedAt)),
+    );
     const ppePct = Math.round((ppe?.confidence || 0) * 100);
     const spillPct = Math.round((spill?.confidence || 0) * 100);
     const statusParts = [];
-    if (ppe) statusParts.push(ppe.ppe_violation ? `PPE danger ${ppePct}%` : `PPE OK ${ppePct}%`);
-    if (spill) statusParts.push(spill.spill_detected ? `SPILL ${spillPct}%` : `SPILL OK ${spillPct}%`);
+    if (ppe)
+      statusParts.push(
+        ppe.ppe_violation ? `PPE danger ${ppePct}%` : `PPE OK ${ppePct}%`,
+      );
+    if (spill)
+      statusParts.push(
+        spill.spill_detected ? `SPILL ${spillPct}%` : `SPILL OK ${spillPct}%`,
+      );
     updateDashboardHybridStatus(statusParts.join(" | "));
 
     const overlayFps = document.getElementById("overlay-fps");
     if (overlayFps) overlayFps.textContent = `${fps} FPS`;
     const overlayRes = document.getElementById("overlay-res");
-    if (overlayRes) overlayRes.textContent = `${video.videoWidth || 0}x${video.videoHeight || 0}`;
+    if (overlayRes)
+      overlayRes.textContent = `${video.videoWidth || 0}x${video.videoHeight || 0}`;
     const m1 = document.getElementById("m1-fps");
     if (m1) m1.textContent = String(fps);
     const m5 = document.getElementById("m5-iou");
     if (m5 && spill) m5.textContent = `${spillPct}%`;
 
     const now = Date.now();
-    if (ppe?.ppe_violation && now - dashboardHybridLastAlertAt.ppe > PPE_ALERT_COOLDOWN_MS) {
+    if (
+      ppe?.ppe_violation &&
+      now - dashboardHybridLastAlertAt.ppe > PPE_ALERT_COOLDOWN_MS
+    ) {
       dashboardHybridLastAlertAt.ppe = now;
-      addAlert("warning", "PPE", `Violation EPI detectee sur ppe_spill.mp4 (${ppePct}%)`);
+      addAlert(
+        "warning",
+        "PPE",
+        `Violation EPI detectee sur ppe_spill.mp4 (${ppePct}%)`,
+      );
       showPopupNotification(`Dashboard: Violation EPI (${ppePct}%)`, "warning");
     }
-    if (spill?.spill_detected && now - dashboardHybridLastAlertAt.spill > SPILL_ALERT_COOLDOWN_MS) {
+    if (
+      spill?.spill_detected &&
+      now - dashboardHybridLastAlertAt.spill > SPILL_ALERT_COOLDOWN_MS
+    ) {
       dashboardHybridLastAlertAt.spill = now;
-      addAlert("critical", "Spill", `Deversement detecte sur ppe_spill.mp4 (${spillPct}%)`);
-      showPopupNotification(`Dashboard: Deversement detecte (${spillPct}%)`, "critical");
+      addAlert(
+        "critical",
+        "Spill",
+        `Deversement detecte sur ppe_spill.mp4 (${spillPct}%)`,
+      );
+      showPopupNotification(
+        `Dashboard: Deversement detecte (${spillPct}%)`,
+        "critical",
+      );
     }
 
     if (ppe) {
-      _notifyDetection({ cam: "dashboard-ppe-spill", type: "ppe", detected: ppe.ppe_violation, confidence: ppe.confidence, details: ppe.details || {} });
+      _notifyDetection({
+        cam: "dashboard-ppe-spill",
+        type: "ppe",
+        detected: ppe.ppe_violation,
+        confidence: ppe.confidence,
+        details: ppe.details || {},
+      });
     }
     if (spill) {
-      _notifyDetection({ cam: "dashboard-ppe-spill", type: "spill", detected: spill.spill_detected, confidence: spill.confidence, details: spill.details || {} });
+      _notifyDetection({
+        cam: "dashboard-ppe-spill",
+        type: "spill",
+        detected: spill.spill_detected,
+        confidence: spill.confidence,
+        details: spill.details || {},
+      });
     }
   } catch (err) {
     updateDashboardHybridStatus("Erreur detection");
@@ -2628,7 +2873,14 @@ async function analyzeDashboardHybridFrame(video) {
 }
 
 async function analyzeDashboardFallSpillFrame(video) {
-  if (!dashboardFallSpillActive || dashboardFallSpillRequestInFlight || !video || video.paused || video.ended) return;
+  if (
+    !dashboardFallSpillActive ||
+    dashboardFallSpillRequestInFlight ||
+    !video ||
+    video.paused ||
+    video.ended
+  )
+    return;
   const useFall = isModuleEnabled("fall");
   const useSpill = isModuleEnabled("hazards");
   if (!useFall && !useSpill) {
@@ -2650,42 +2902,75 @@ async function analyzeDashboardFallSpillFrame(video) {
   try {
     const requests = [];
     if (useFall) {
-      requests.push(fetch("/api/fall-detection/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
-        body: JSON.stringify({ image: imageData, camera: "dashboard-spill-fall" }),
-      }).then((res) => res.json()).then((data) => ({ key: "fall", data })));
+      requests.push(
+        fetch("/api/fall-detection/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+          body: JSON.stringify({
+            image: imageData,
+            camera: "dashboard-spill-fall",
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => ({ key: "fall", data })),
+      );
     }
     if (useSpill) {
-      requests.push(fetch("/api/spill-detection/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
-        body: JSON.stringify({ image: imageData, camera: "dashboard-spill-fall" }),
-      }).then((res) => res.json()).then((data) => ({ key: "spill", data })));
+      requests.push(
+        fetch("/api/spill-detection/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+          body: JSON.stringify({
+            image: imageData,
+            camera: "dashboard-spill-fall",
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => ({ key: "spill", data })),
+      );
     }
 
     const responses = await Promise.all(requests);
     const fall = responses.find((item) => item.key === "fall")?.data;
     const spill = responses.find((item) => item.key === "spill")?.data;
-    if ((fall && fall.status !== "success") || (spill && spill.status !== "success")) {
+    if (
+      (fall && fall.status !== "success") ||
+      (spill && spill.status !== "success")
+    ) {
       updateDashboardFallSpillStatus("Erreur API");
       return;
     }
 
     drawDashboardFallSpillOverlay(video, fall, spill);
     dashboardFallSpillFrameCount += 1;
-    const fps = Math.max(1, Math.round(1000 / Math.max(1, performance.now() - startedAt)));
+    const fps = Math.max(
+      1,
+      Math.round(1000 / Math.max(1, performance.now() - startedAt)),
+    );
     const fallPct = Math.round((fall?.confidence || 0) * 100);
     const spillPct = Math.round((spill?.confidence || 0) * 100);
     const statusParts = [];
-    if (fall) statusParts.push(fall.fall_detected ? `FALL danger ${fallPct}%` : `FALL OK ${fallPct}%`);
-    if (spill) statusParts.push(spill.spill_detected ? `SPILL ${spillPct}%` : `SPILL OK ${spillPct}%`);
+    if (fall)
+      statusParts.push(
+        fall.fall_detected ? `FALL danger ${fallPct}%` : `FALL OK ${fallPct}%`,
+      );
+    if (spill)
+      statusParts.push(
+        spill.spill_detected ? `SPILL ${spillPct}%` : `SPILL OK ${spillPct}%`,
+      );
     updateDashboardFallSpillStatus(statusParts.join(" | "));
 
     const overlayFps = document.getElementById("fall-spill-overlay-fps");
     if (overlayFps) overlayFps.textContent = `${fps} FPS`;
     const overlayRes = document.getElementById("fall-spill-overlay-res");
-    if (overlayRes) overlayRes.textContent = `${video.videoWidth || 0}x${video.videoHeight || 0}`;
+    if (overlayRes)
+      overlayRes.textContent = `${video.videoWidth || 0}x${video.videoHeight || 0}`;
     const m3f1 = document.getElementById("m3-f1");
     if (m3f1 && fall) m3f1.textContent = `${fallPct}%`;
     const m3lat = document.getElementById("m3-lat");
@@ -2694,22 +2979,54 @@ async function analyzeDashboardFallSpillFrame(video) {
     if (m5dice && spill) m5dice.textContent = `${spillPct}%`;
 
     const now = Date.now();
-    if (fall?.fall_detected && now - dashboardFallSpillLastAlertAt.fall > 9000) {
+    if (
+      fall?.fall_detected &&
+      now - dashboardFallSpillLastAlertAt.fall > 9000
+    ) {
       dashboardFallSpillLastAlertAt.fall = now;
-      addAlert("critical", "Fall", `Chute detectee sur spill_fall.mp4 (${fallPct}%)`);
-      showPopupNotification(`Dashboard: Chute detectee (${fallPct}%)`, "critical");
+      addAlert(
+        "critical",
+        "Fall",
+        `Chute detectee sur spill_fall.mp4 (${fallPct}%)`,
+      );
+      showPopupNotification(
+        `Dashboard: Chute detectee (${fallPct}%)`,
+        "critical",
+      );
     }
-    if (spill?.spill_detected && now - dashboardFallSpillLastAlertAt.spill > SPILL_ALERT_COOLDOWN_MS) {
+    if (
+      spill?.spill_detected &&
+      now - dashboardFallSpillLastAlertAt.spill > SPILL_ALERT_COOLDOWN_MS
+    ) {
       dashboardFallSpillLastAlertAt.spill = now;
-      addAlert("critical", "Spill", `Deversement detecte sur spill_fall.mp4 (${spillPct}%)`);
-      showPopupNotification(`Dashboard: Deversement detecte (${spillPct}%)`, "critical");
+      addAlert(
+        "critical",
+        "Spill",
+        `Deversement detecte sur spill_fall.mp4 (${spillPct}%)`,
+      );
+      showPopupNotification(
+        `Dashboard: Deversement detecte (${spillPct}%)`,
+        "critical",
+      );
     }
 
     if (fall) {
-      _notifyDetection({ cam: "dashboard-spill-fall", type: "fall", detected: fall.fall_detected, confidence: fall.confidence, details: fall.details || {} });
+      _notifyDetection({
+        cam: "dashboard-spill-fall",
+        type: "fall",
+        detected: fall.fall_detected,
+        confidence: fall.confidence,
+        details: fall.details || {},
+      });
     }
     if (spill) {
-      _notifyDetection({ cam: "dashboard-spill-fall", type: "spill", detected: spill.spill_detected, confidence: spill.confidence, details: spill.details || {} });
+      _notifyDetection({
+        cam: "dashboard-spill-fall",
+        type: "spill",
+        detected: spill.spill_detected,
+        confidence: spill.confidence,
+        details: spill.details || {},
+      });
     }
   } catch (err) {
     updateDashboardFallSpillStatus("Erreur detection");
@@ -2749,10 +3066,17 @@ function startAnalysis() {
     video.loop = true;
     const start = () => {
       if (!dashboardHybridActive || video.dataset.shouldRun !== "1") return;
-      video.play().catch((err) => console.error("[SafeVision] dashboard PPE+SPILL play:", err));
+      video
+        .play()
+        .catch((err) =>
+          console.error("[SafeVision] dashboard PPE+SPILL play:", err),
+        );
       if (!dashboardHybridInterval) {
         analyzeDashboardHybridFrame(video);
-        dashboardHybridInterval = setInterval(() => analyzeDashboardHybridFrame(video), 850);
+        dashboardHybridInterval = setInterval(
+          () => analyzeDashboardHybridFrame(video),
+          850,
+        );
       }
       updateDashboardHybridStatus("Analyse active");
     };
@@ -2764,21 +3088,33 @@ function startAnalysis() {
 
   const fallSpillVideo = document.getElementById("fall-spill-video");
   if (fallSpillVideo) {
-    if (!fallSpillVideo.src) fallSpillVideo.src = DASHBOARD_SPILL_FALL_SRC + "?v=" + Date.now();
+    if (!fallSpillVideo.src)
+      fallSpillVideo.src = DASHBOARD_SPILL_FALL_SRC + "?v=" + Date.now();
     dashboardFallSpillActive = true;
     fallSpillVideo.dataset.shouldRun = "1";
     fallSpillVideo.loop = true;
     const startFallSpill = () => {
-      if (!dashboardFallSpillActive || fallSpillVideo.dataset.shouldRun !== "1") return;
-      fallSpillVideo.play().catch((err) => console.error("[SafeVision] dashboard FALL+SPILL play:", err));
+      if (!dashboardFallSpillActive || fallSpillVideo.dataset.shouldRun !== "1")
+        return;
+      fallSpillVideo
+        .play()
+        .catch((err) =>
+          console.error("[SafeVision] dashboard FALL+SPILL play:", err),
+        );
       if (!dashboardFallSpillInterval) {
         analyzeDashboardFallSpillFrame(fallSpillVideo);
-        dashboardFallSpillInterval = setInterval(() => analyzeDashboardFallSpillFrame(fallSpillVideo), 900);
+        dashboardFallSpillInterval = setInterval(
+          () => analyzeDashboardFallSpillFrame(fallSpillVideo),
+          900,
+        );
       }
       updateDashboardFallSpillStatus("Analyse active");
     };
     if (fallSpillVideo.readyState >= 2) startFallSpill();
-    else fallSpillVideo.addEventListener("loadeddata", startFallSpill, { once: true });
+    else
+      fallSpillVideo.addEventListener("loadeddata", startFallSpill, {
+        once: true,
+      });
     const info = document.getElementById("fall-spill-video-info");
     if (info) info.style.display = "flex";
   }
@@ -2816,7 +3152,11 @@ function stopAnalysis() {
   if (overlayFps) overlayFps.textContent = "- FPS";
 }
 
-function loadDashboardVideoSource(src, label = "ppe_spill.mp4", autoplay = false) {
+function loadDashboardVideoSource(
+  src,
+  label = "ppe_spill.mp4",
+  autoplay = false,
+) {
   const video = document.getElementById("main-video");
   if (!video) return;
   stopAnalysis();
@@ -2828,7 +3168,8 @@ function loadDashboardVideoSource(src, label = "ppe_spill.mp4", autoplay = false
     if (first) first.textContent = `Fichier: ${label}`;
   }
   updateDashboardHybridStatus("Pret");
-  if (autoplay) video.addEventListener("loadeddata", () => startAnalysis(), { once: true });
+  if (autoplay)
+    video.addEventListener("loadeddata", () => startAnalysis(), { once: true });
 }
 
 function toggleModule(chip) {
@@ -2877,8 +3218,7 @@ function _startCamWithLoop(id, src, startFn) {
   let detectionStarted = false;
   const startPlaybackAndDetection = () => {
     if (!camerasRunning || v.dataset.shouldRun !== "1") return;
-    v
-      .play()
+    v.play()
       .then(() => {
         if (detectionStarted) return;
         detectionStarted = true;
@@ -2924,7 +3264,11 @@ function startCameras() {
   _startCamWithLoop("cam8-video", LIVE_VIDEO_SRC_CAM8, startCam8Detection);
   _startCamWithLoop("cam9-video", LIVE_VIDEO_SRC_CAM9, startCam9Detection);
   _startCamWithLoop("cam10-video", LIVE_VIDEO_SRC_CAM10, startCam10Detection);
-  _startCamWithLoop("cam11-video", LIVE_VIDEO_SRC_CAM8_PROXIMITY, startCam11Detection);
+  _startCamWithLoop(
+    "cam11-video",
+    LIVE_VIDEO_SRC_CAM8_PROXIMITY,
+    startCam11Detection,
+  );
 }
 
 function stopCameras() {
