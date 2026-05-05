@@ -8,10 +8,12 @@ from django.http import JsonResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Avg, Count, Max, Sum
 from django.conf import settings
+from django.utils import timezone
 import json
 from datetime import datetime, timedelta
 import random
 import os
+from urllib.parse import urljoin
 from .models import Module, Alert, Detection
 from .forms import SignUpForm
 import cv2
@@ -33,6 +35,8 @@ from .worker_tracking_detector import detect_worker_tracking_in_frame
 from decouple import config
 import requests
 from django.views.decorators.csrf import csrf_exempt
+
+SMS_EVENT_CACHE = {}
 
 MODULE_SLUG_MAP = {
     'ppe': {
@@ -454,6 +458,7 @@ class AlertsView(TemplateView):
         context = super().get_context_data(**kwargs)
         context['app_name'] = 'Alertes SafeVision'
         context['alerts']   = Alert.objects.order_by('-timestamp')[:25]
+        context['modules']  = Module.objects.all()
         return context
 
 
@@ -1036,6 +1041,108 @@ def _save_detection_capture(frame, event_type, camera, confidence, details=None,
     }
 
 
+def _public_media_url(relative_or_media_url):
+    public_base_url = config('PUBLIC_BASE_URL', default='').strip()
+    if not public_base_url or not relative_or_media_url:
+        return ''
+
+    clean_path = str(relative_or_media_url).lstrip('/')
+    return urljoin(public_base_url.rstrip('/') + '/', clean_path)
+
+
+def _sms_cooldown_active(event_key):
+    cooldown_seconds = int(config('TWILIO_SMS_COOLDOWN_SECONDS', default='300') or 300)
+    now = timezone.now()
+    last_sent_at = SMS_EVENT_CACHE.get(event_key)
+    if last_sent_at and (now - last_sent_at).total_seconds() < cooldown_seconds:
+        return True
+    return False
+
+
+def _mark_sms_sent(event_key):
+    SMS_EVENT_CACHE[event_key] = timezone.now()
+
+
+def _send_twilio_sms(body, media_url=None):
+    account_sid = config('TWILIO_ACCOUNT_SID', default='').strip()
+    auth_token = config('TWILIO_AUTH_TOKEN', default='').strip()
+    to_number = config('TWILIO_TO_NUMBER', default='').strip()
+    from_number = config('TWILIO_FROM_NUMBER', default='').strip()
+    messaging_service_sid = config('TWILIO_MESSAGING_SERVICE_SID', default='').strip()
+
+    if not account_sid or not auth_token or not to_number:
+        return {
+            'sent': False,
+            'reason': 'Twilio non configure: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN et TWILIO_TO_NUMBER sont requis.',
+        }
+    if not from_number and not messaging_service_sid:
+        return {
+            'sent': False,
+            'reason': 'Twilio non configure: TWILIO_FROM_NUMBER ou TWILIO_MESSAGING_SERVICE_SID est requis.',
+        }
+
+    payload = {
+        'To': to_number,
+        'Body': body,
+    }
+    if messaging_service_sid:
+        payload['MessagingServiceSid'] = messaging_service_sid
+    else:
+        payload['From'] = from_number
+    if media_url and config('TWILIO_SEND_MEDIA_URL', default='False').lower() in ('1', 'true', 'yes', 'on'):
+        payload['MediaUrl'] = media_url
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
+    try:
+        response = requests.post(url, data=payload, auth=(account_sid, auth_token), timeout=8)
+        if response.status_code >= 400:
+            return {
+                'sent': False,
+                'status_code': response.status_code,
+                'reason': response.text[:500],
+            }
+        result = response.json()
+        return {
+            'sent': True,
+            'sid': result.get('sid'),
+            'status': result.get('status'),
+            'media_attached': bool(payload.get('MediaUrl')),
+        }
+    except requests.exceptions.RequestException as exc:
+        return {'sent': False, 'reason': str(exc)}
+
+
+def _notify_fall_sms(alert, camera, confidence, capture_meta):
+    event_key = f"fall:{camera}"
+    if _sms_cooldown_active(event_key):
+        alert.details = {
+            **(alert.details or {}),
+            'sms': {'sent': False, 'reason': 'cooldown actif'},
+        }
+        alert.save(update_fields=['details'])
+        return alert.details['sms']
+
+    capture_url = capture_meta.get('capture_url')
+    public_capture_url = _public_media_url(capture_url)
+    message = (
+        f"ALERTE CHUTE SafeVision: chute detectee sur {str(camera).upper()} "
+        f"(confiance {confidence:.0%})."
+    )
+    if public_capture_url:
+        message = f"{message} Capture: {public_capture_url}"
+
+    sms_result = _send_twilio_sms(message, media_url=public_capture_url)
+    if sms_result.get('sent'):
+        _mark_sms_sent(event_key)
+    alert.details = {
+        **(alert.details or {}),
+        'sms': sms_result,
+        'public_capture_url': public_capture_url,
+    }
+    alert.save(update_fields=['details'])
+    return sms_result
+
+
 def _get_module_by_name(*names):
     """Cherche un module par plusieurs noms possibles (ordre de priorité)."""
     for name in names:
@@ -1210,6 +1317,8 @@ def api_fall_detection(request):
 
         fall_detected, confidence, details = detect_fall_in_frame(frame)
 
+        sms_result = None
+        capture_meta = {}
         module = _get_module_by_name('fall', 'fatigue')
         if module:
             capture_meta = _save_detection_capture(
@@ -1232,7 +1341,7 @@ def api_fall_detection(request):
             )
 
             if fall_detected:
-                Alert.objects.create(
+                alert = Alert.objects.create(
                     module      = module,
                     severity    = 'critical',
                     title       = 'Chute détectée !',
@@ -1246,12 +1355,16 @@ def api_fall_detection(request):
                         **capture_meta,
                     },
                 )
+                sms_result = _notify_fall_sms(alert, data.get('camera', 'cam1'), confidence, capture_meta)
 
         return JsonResponse({
             'status':        'success',
             'fall_detected': bool(fall_detected),
             'confidence':    float(confidence),
-            'details':       details,
+            'details':       {**details, **capture_meta} if fall_detected else details,
+            'capture_url':   capture_meta.get('capture_url') if fall_detected else None,
+            'public_capture_url': _public_media_url(capture_meta.get('capture_url')) if fall_detected else None,
+            'sms':           sms_result,
             'message':       'Analyse de chute terminée',
         })
 
@@ -1557,7 +1670,84 @@ def api_sign_detect(request):
 
 @csrf_exempt
 def api_proximity_detection(request):
-    """API endpoint pour la détection de proximité homme-machine (image unique)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+    try:
+        data = json.loads(request.body)
+        if 'image' not in data:
+            return JsonResponse({'status': 'error', 'message': 'Image requise'}, status=400)
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Décodage: {e}'}, status=400)
+
+        # ── Détection ─────────────────────────────────────────────
+        from .proximity_detector import proximity_detector as _pd
+        proximity_detected, confidence, details = _pd.detect_proximity(frame)
+
+        # ── Annotation ────────────────────────────────────────────
+        annotated     = _pd.annotate_frame(frame.copy(), details)
+        _, buf        = cv2.imencode('.jpg', annotated,
+                                     [cv2.IMWRITE_JPEG_QUALITY, 88])
+        annotated_b64 = ('data:image/jpeg;base64,'
+                         + base64.b64encode(buf).decode('utf-8'))
+
+        # ── Sévérité max ──────────────────────────────────────────
+        incidents = details.get('incident_logs', [])
+        order     = ['safe','vigilance','alert','critical']
+        top       = max(
+            [i.get('severity','safe') for i in incidents] or ['safe'],
+            key=lambda s: order.index(s) if s in order else 0
+        )
+
+        # ── Persistance ───────────────────────────────────────────
+        module = _get_module_by_name('machinery','proximity','homme-machine')
+        if module:
+            Detection.objects.create(
+                module=module, confidence=confidence,
+                count=len(incidents),
+                details={
+                    'proximity_detected': proximity_detected,
+                    'confidence'        : confidence,
+                    'camera'            : data.get('camera','cam8'),
+                    'workers_count'     : details.get('workers_count',0),
+                    'machines_count'    : details.get('machines_count',0),
+                    'incidents'         : len(incidents),
+                },
+            )
+            if proximity_detected and incidents:
+                sev  = incidents[0].get('severity','alert')
+                dist = incidents[0].get('distance_m', 0)
+                Alert.objects.create(
+                    module=module, severity=sev,
+                    title=f'Proximité dangereuse ! ({dist:.1f}m)',
+                    description=f"Ouvrier à {dist:.1f}m d'un engin",
+                    details={
+                        'distance'  : dist, 'severity': sev,
+                        'camera'    : data.get('camera','CAM 8'),
+                        'event_type': 'proximity',
+                        'timestamp' : datetime.now().isoformat(),
+                    },
+                )
+
+        return JsonResponse({
+            'status'            : 'success',
+            'proximity_detected': bool(proximity_detected),
+            'confidence'        : round(float(confidence), 3),
+            'annotated_image'   : annotated_b64,
+            'details'           : {
+                'workers_count'  : details.get('workers_count', 0),
+                'machines_count' : details.get('machines_count', 0),
+                'severity'       : top,
+                'incidents_count': len(incidents),
+                'incident_logs'  : incidents,
+            },
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status':'error','message':'JSON invalide'},status=400)
+    except Exception as e:
+        return JsonResponse({'status':'error','message':str(e)},status=500)
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
 
@@ -1566,17 +1756,28 @@ def api_proximity_detection(request):
 
         if 'image' not in data:
             return JsonResponse(
-                {'status': 'error', 'message': 'Image requise pour la détection de proximité'}, status=400
-            )
+                {'status': 'error', 'message': 'Image requise'}, status=400)
 
         try:
             frame = _decode_image(data['image'])
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Erreur de décodage image : {e}'}, status=400)
+            return JsonResponse(
+                {'status': 'error', 'message': f'Erreur décodage : {e}'}, status=400)
 
-        proximity_detected, confidence, details = detect_proximity_in_frame(frame)
+        # ── Détection ────────────────────────────────────────────────────────
+        from .proximity_detector import proximity_detector as _pd
+        proximity_detected, confidence, details = _pd.detect_proximity(frame)
 
-        module = _get_module_by_name('machinery', 'proximity', 'homme-machine')
+        # ── Annotation visuelle ───────────────────────────────────────────────
+        annotated = _pd.annotate_frame(frame.copy(), details)
+        _, buf     = cv2.imencode('.jpg', annotated,
+                                  [cv2.IMWRITE_JPEG_QUALITY, 88])
+        annotated_b64 = ('data:image/jpeg;base64,'
+                         + base64.b64encode(buf).decode('utf-8'))
+
+        # ── Persistance ───────────────────────────────────────────────────────
+        incidents = details.get('incident_logs', [])
+        module    = _get_module_by_name('machinery', 'proximity')
         if module:
             capture_meta = _save_detection_capture(
                 frame, 'proximity', data.get('camera', 'cam8'), confidence, details, 'PROXIMITE'
@@ -1584,53 +1785,59 @@ def api_proximity_detection(request):
             Detection.objects.create(
                 module     = module,
                 confidence = confidence,
-                count      = len(details.get('proximity_alerts', [])),
+                count      = len(incidents),
                 details    = {
                     'proximity_detected': proximity_detected,
-                    'confidence':         confidence,
-                    'camera':             data.get('camera', 'cam1'),
-                    'proximity_alerts':   details.get('proximity_alerts', []),
-                    'detections':         details.get('detections', []),
-                    'frame_shape':        list(map(int, frame.shape)),
-                    'model_version':      '1.0.0',
-                    **capture_meta,
+                    'confidence'        : confidence,
+                    'camera'            : data.get('camera', 'cam8'),
+                    'workers_count'     : details.get('workers_count', 0),
+                    'machines_count'    : details.get('machines_count', 0),
+                    'incidents'         : len(incidents),
                 },
             )
+            if proximity_detected and incidents:
+                sev  = incidents[0].get('severity', 'alert')
+                dist = incidents[0].get('distance_m', 0)
+                Alert.objects.create(
+                    module      = module,
+                    severity    = sev,
+                    title       = f'Proximité dangereuse ! ({dist:.1f}m)',
+                    description = (f'Ouvrier à {dist:.1f}m d\'un engin'),
+                    details     = {
+                        'distance'  : dist,
+                        'severity'  : sev,
+                        'camera'    : data.get('camera', 'CAM 8'),
+                        'event_type': 'proximity',
+                        'timestamp' : datetime.now().isoformat(),
+                    },
+                )
 
-            if proximity_detected:
-                for alert in details.get('proximity_alerts', []):
-                    Alert.objects.create(
-                        module      = module,
-                        severity    = alert.get('severity', 'warning'),
-                        title       = f'Proximité dangereuse ! ({alert.get("distance", 0):.1f}m)',
-                        description = f'Proximité détectée entre ouvrier et machine à {alert.get("distance", 0):.1f}m',
-                        details     = {
-                            'distance':   alert.get('distance', 0),
-                            'severity':   alert.get('severity', 'warning'),
-                            'worker_id':  alert.get('worker_id'),
-                            'machine_id': alert.get('machine_id'),
-                            'location':   details.get('location', 'Zone principale'),
-                            'camera':     data.get('camera', 'CAM 1'),
-                            'event_type': 'proximity',
-                            'timestamp':  datetime.now().isoformat(),
-                            **capture_meta,
-                        },
-                    )
+        # ── Sévérité maximale ─────────────────────────────────────────────────
+        order = ['safe', 'vigilance', 'alert', 'critical']
+        top   = max(
+            [i.get('severity', 'safe') for i in incidents],
+            key=lambda s: order.index(s) if s in order else 0,
+            default='safe'
+        )
 
         return JsonResponse({
-            'status':             'success',
+            'status'            : 'success',
             'proximity_detected': bool(proximity_detected),
-            'confidence':         float(confidence),
-            'details':            details,
-            'message':            'Analyse de proximité terminée',
+            'confidence'        : round(float(confidence), 3),
+            'annotated_image'   : annotated_b64,
+            'details'           : {
+                'workers_count' : details.get('workers_count', 0),
+                'machines_count': details.get('machines_count', 0),
+                'severity'      : top,
+                'incidents_count': len(incidents),
+                'incident_logs' : incidents,
+            },
         })
 
     except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
+        return JsonResponse({'status': 'error', 'message': 'JSON invalide'}, status=400)
     except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'Erreur lors de la détection de proximité : {e}'}, status=500)
-
-
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 @csrf_exempt
 def api_proximity_detection_batch(request):
     """API endpoint pour traiter plusieurs images en batch (proximité)."""
