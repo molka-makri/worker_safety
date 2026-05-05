@@ -643,32 +643,10 @@
     moduleRuntimeState.alerts.unshift({ severity, message, time });
   }
 
-<<<<<<< HEAD
-  container.querySelector('.empty-state')?.remove();
-  const pct = Math.round((Number(result.confidence) || 0) * 100);
-  const severity = result.severity || (['fall', 'spill', 'blocked_exit'].includes(result.type) ? 'critical' : 'warning');
-  const message = result.message || `${detectionLabel(result.type)} detecte sur ${cameraLabel(result.cam)} (${pct}%)`;
-  const time = result.time || formatTime();
-  const item = document.createElement('div');
-  item.className = 'alert-item';
-  item.style.marginBottom = '8px';
-  item.innerHTML = `
-    <div class="alert-severity sev-${severity}"></div>
-    <div class="alert-body">
-      <div class="alert-module">${escapeHtml(MODULE_NAME.toUpperCase())}</div>
-      <div class="alert-msg">${escapeHtml(message)}</div>
-      <div class="alert-time">${escapeHtml(time)}</div>
-    </div>`;
-  container.insertBefore(item, container.firstChild);
-  while (container.children.length > 20) container.removeChild(container.lastChild);
-  moduleRuntimeState.alerts.unshift({ severity, message, time });
-}
-=======
   window.onDetectionResult = function onDetectionResult(result) {
     moduleRuntimeState.lastResult = result;
     document.getElementById("model-loaded-status").textContent = "Actif";
   };
->>>>>>> 1452344e85937f36c160d59a2b2c05230378d01d
 
   function resetLivePanels() {
     const baselineDetectionId = Math.max(

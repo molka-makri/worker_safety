@@ -39,8 +39,11 @@
 
   <!-- VIDEO MAIN -->
   <div class="video-main">
+    <div class="dashboard-hybrid-streams">
     <div class="video-feed" id="main-video-container">
-      <div class="video-placeholder" id="video-placeholder">
+      <video id="main-video" class="cam-video dashboard-main-video" src="/media/ppe_spill.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="main-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="video-placeholder" id="video-placeholder" style="display:none">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
         <p>Sélectionner une source vidéo</p>
         <p style="font-size:10px; opacity:.5">Caméra en direct ou fichier vidéo</p>
@@ -48,10 +51,30 @@
 
       <div class="video-overlay-info" id="video-info" style="display:none">
         <div class="rec-indicator"><span class="rec-dot"></span> REC</div>
-        <span id="overlay-cam">CAM 1</span>
+        <span id="overlay-cam">PPE + SPILL</span>
         <span id="overlay-fps">— FPS</span>
         <span id="overlay-res">—</span>
       </div>
+      <div class="cam-video-overlay" id="main-video-overlay">
+        <span style="font-size:10px; font-family:var(--font-mono);">Fichier: ppe_spill.mp4</span>
+        <span style="font-size:10px; font-family:var(--font-mono);" id="main-hybrid-status">Detection: en attente...</span>
+      </div>
+    </div>
+
+    <div class="video-feed" id="fall-spill-video-container">
+      <video id="fall-spill-video" class="cam-video dashboard-main-video" src="/media/spill_fall.mp4" muted loop playsinline preload="auto"></video>
+      <canvas id="fall-spill-overlay-canvas" class="cam-overlay-canvas"></canvas>
+      <div class="video-overlay-info" id="fall-spill-video-info" style="display:none">
+        <div class="rec-indicator"><span class="rec-dot"></span> REC</div>
+        <span>FALL + SPILL</span>
+        <span id="fall-spill-overlay-fps">- FPS</span>
+        <span id="fall-spill-overlay-res">-</span>
+      </div>
+      <div class="cam-video-overlay" id="fall-spill-video-overlay">
+        <span style="font-size:10px; font-family:var(--font-mono);">Fichier: spill_fall.mp4</span>
+        <span style="font-size:10px; font-family:var(--font-mono);" id="fall-spill-hybrid-status">Detection: en attente...</span>
+      </div>
+    </div>
     </div>
 
     <div class="video-controls">
@@ -70,6 +93,7 @@
 
       <div class="module-toggles">
         <span class="toggle-chip on" style="--chip-color: #4AE3B5; --chip-rgb: 74,227,181" data-module="ppe" onclick="toggleModule(this)">EPI</span>
+        <span class="toggle-chip on" style="--chip-color: #FF3B2F; --chip-rgb: 255,59,47" data-module="fall" onclick="toggleModule(this)">CHUTE</span>
         <span class="toggle-chip on" style="--chip-color: #7B61FF; --chip-rgb: 123,97,255" data-module="posture" onclick="toggleModule(this)">POSTURE</span>
         <span class="toggle-chip on" style="--chip-color: #FFB800; --chip-rgb: 255,184,0" data-module="fatigue" onclick="toggleModule(this)">FATIGUE</span>
         <span class="toggle-chip on" style="--chip-color: #00C2FF; --chip-rgb: 0,194,255" data-module="tracking" onclick="toggleModule(this)">TRACKING</span>
