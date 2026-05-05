@@ -28,6 +28,8 @@ from .views import (
     api_posture_detection,   # CAM 9 — posture
     api_panic_detection,     # CAM 10 — panic
     api_worker_tracking_detection,
+    api_chat,
+
 )
 
 app_name = 'app'
@@ -78,4 +80,5 @@ urlpatterns = [
     
     # ── API — Tracking travailleurs (CAM 8) ───────────────
     path('api/worker-tracking-detection/', api_worker_tracking_detection, name='api_worker_tracking_detection'),
+     path('api/chat/', api_chat, name='api_chat'),
 ]

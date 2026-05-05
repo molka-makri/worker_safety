@@ -30,6 +30,9 @@ from .sign_detector import detect_sign_in_image
 from .posture_detector import detect_posture_in_frame
 from .panic_detector import detect_panic_in_frame
 from .worker_tracking_detector import detect_worker_tracking_in_frame
+from decouple import config
+import requests
+from django.views.decorators.csrf import csrf_exempt
 
 MODULE_SLUG_MAP = {
     'ppe': {
@@ -1554,7 +1557,84 @@ def api_sign_detect(request):
 
 @csrf_exempt
 def api_proximity_detection(request):
-    """API endpoint pour la détection de proximité homme-machine (image unique)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+    try:
+        data = json.loads(request.body)
+        if 'image' not in data:
+            return JsonResponse({'status': 'error', 'message': 'Image requise'}, status=400)
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Décodage: {e}'}, status=400)
+
+        # ── Détection ─────────────────────────────────────────────
+        from .proximity_detector import proximity_detector as _pd
+        proximity_detected, confidence, details = _pd.detect_proximity(frame)
+
+        # ── Annotation ────────────────────────────────────────────
+        annotated     = _pd.annotate_frame(frame.copy(), details)
+        _, buf        = cv2.imencode('.jpg', annotated,
+                                     [cv2.IMWRITE_JPEG_QUALITY, 88])
+        annotated_b64 = ('data:image/jpeg;base64,'
+                         + base64.b64encode(buf).decode('utf-8'))
+
+        # ── Sévérité max ──────────────────────────────────────────
+        incidents = details.get('incident_logs', [])
+        order     = ['safe','vigilance','alert','critical']
+        top       = max(
+            [i.get('severity','safe') for i in incidents] or ['safe'],
+            key=lambda s: order.index(s) if s in order else 0
+        )
+
+        # ── Persistance ───────────────────────────────────────────
+        module = _get_module_by_name('machinery','proximity','homme-machine')
+        if module:
+            Detection.objects.create(
+                module=module, confidence=confidence,
+                count=len(incidents),
+                details={
+                    'proximity_detected': proximity_detected,
+                    'confidence'        : confidence,
+                    'camera'            : data.get('camera','cam8'),
+                    'workers_count'     : details.get('workers_count',0),
+                    'machines_count'    : details.get('machines_count',0),
+                    'incidents'         : len(incidents),
+                },
+            )
+            if proximity_detected and incidents:
+                sev  = incidents[0].get('severity','alert')
+                dist = incidents[0].get('distance_m', 0)
+                Alert.objects.create(
+                    module=module, severity=sev,
+                    title=f'Proximité dangereuse ! ({dist:.1f}m)',
+                    description=f"Ouvrier à {dist:.1f}m d'un engin",
+                    details={
+                        'distance'  : dist, 'severity': sev,
+                        'camera'    : data.get('camera','CAM 8'),
+                        'event_type': 'proximity',
+                        'timestamp' : datetime.now().isoformat(),
+                    },
+                )
+
+        return JsonResponse({
+            'status'            : 'success',
+            'proximity_detected': bool(proximity_detected),
+            'confidence'        : round(float(confidence), 3),
+            'annotated_image'   : annotated_b64,
+            'details'           : {
+                'workers_count'  : details.get('workers_count', 0),
+                'machines_count' : details.get('machines_count', 0),
+                'severity'       : top,
+                'incidents_count': len(incidents),
+                'incident_logs'  : incidents,
+            },
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status':'error','message':'JSON invalide'},status=400)
+    except Exception as e:
+        return JsonResponse({'status':'error','message':str(e)},status=500)
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
 
@@ -1563,17 +1643,28 @@ def api_proximity_detection(request):
 
         if 'image' not in data:
             return JsonResponse(
-                {'status': 'error', 'message': 'Image requise pour la détection de proximité'}, status=400
-            )
+                {'status': 'error', 'message': 'Image requise'}, status=400)
 
         try:
             frame = _decode_image(data['image'])
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Erreur de décodage image : {e}'}, status=400)
+            return JsonResponse(
+                {'status': 'error', 'message': f'Erreur décodage : {e}'}, status=400)
 
-        proximity_detected, confidence, details = detect_proximity_in_frame(frame)
+        # ── Détection ────────────────────────────────────────────────────────
+        from .proximity_detector import proximity_detector as _pd
+        proximity_detected, confidence, details = _pd.detect_proximity(frame)
 
-        module = _get_module_by_name('machinery', 'proximity', 'homme-machine')
+        # ── Annotation visuelle ───────────────────────────────────────────────
+        annotated = _pd.annotate_frame(frame.copy(), details)
+        _, buf     = cv2.imencode('.jpg', annotated,
+                                  [cv2.IMWRITE_JPEG_QUALITY, 88])
+        annotated_b64 = ('data:image/jpeg;base64,'
+                         + base64.b64encode(buf).decode('utf-8'))
+
+        # ── Persistance ───────────────────────────────────────────────────────
+        incidents = details.get('incident_logs', [])
+        module    = _get_module_by_name('machinery', 'proximity')
         if module:
             capture_meta = _save_detection_capture(
                 frame, 'proximity', data.get('camera', 'cam8'), confidence, details, 'PROXIMITE'
@@ -1581,53 +1672,59 @@ def api_proximity_detection(request):
             Detection.objects.create(
                 module     = module,
                 confidence = confidence,
-                count      = len(details.get('proximity_alerts', [])),
+                count      = len(incidents),
                 details    = {
                     'proximity_detected': proximity_detected,
-                    'confidence':         confidence,
-                    'camera':             data.get('camera', 'cam1'),
-                    'proximity_alerts':   details.get('proximity_alerts', []),
-                    'detections':         details.get('detections', []),
-                    'frame_shape':        list(map(int, frame.shape)),
-                    'model_version':      '1.0.0',
-                    **capture_meta,
+                    'confidence'        : confidence,
+                    'camera'            : data.get('camera', 'cam8'),
+                    'workers_count'     : details.get('workers_count', 0),
+                    'machines_count'    : details.get('machines_count', 0),
+                    'incidents'         : len(incidents),
                 },
             )
+            if proximity_detected and incidents:
+                sev  = incidents[0].get('severity', 'alert')
+                dist = incidents[0].get('distance_m', 0)
+                Alert.objects.create(
+                    module      = module,
+                    severity    = sev,
+                    title       = f'Proximité dangereuse ! ({dist:.1f}m)',
+                    description = (f'Ouvrier à {dist:.1f}m d\'un engin'),
+                    details     = {
+                        'distance'  : dist,
+                        'severity'  : sev,
+                        'camera'    : data.get('camera', 'CAM 8'),
+                        'event_type': 'proximity',
+                        'timestamp' : datetime.now().isoformat(),
+                    },
+                )
 
-            if proximity_detected:
-                for alert in details.get('proximity_alerts', []):
-                    Alert.objects.create(
-                        module      = module,
-                        severity    = alert.get('severity', 'warning'),
-                        title       = f'Proximité dangereuse ! ({alert.get("distance", 0):.1f}m)',
-                        description = f'Proximité détectée entre ouvrier et machine à {alert.get("distance", 0):.1f}m',
-                        details     = {
-                            'distance':   alert.get('distance', 0),
-                            'severity':   alert.get('severity', 'warning'),
-                            'worker_id':  alert.get('worker_id'),
-                            'machine_id': alert.get('machine_id'),
-                            'location':   details.get('location', 'Zone principale'),
-                            'camera':     data.get('camera', 'CAM 1'),
-                            'event_type': 'proximity',
-                            'timestamp':  datetime.now().isoformat(),
-                            **capture_meta,
-                        },
-                    )
+        # ── Sévérité maximale ─────────────────────────────────────────────────
+        order = ['safe', 'vigilance', 'alert', 'critical']
+        top   = max(
+            [i.get('severity', 'safe') for i in incidents],
+            key=lambda s: order.index(s) if s in order else 0,
+            default='safe'
+        )
 
         return JsonResponse({
-            'status':             'success',
+            'status'            : 'success',
             'proximity_detected': bool(proximity_detected),
-            'confidence':         float(confidence),
-            'details':            details,
-            'message':            'Analyse de proximité terminée',
+            'confidence'        : round(float(confidence), 3),
+            'annotated_image'   : annotated_b64,
+            'details'           : {
+                'workers_count' : details.get('workers_count', 0),
+                'machines_count': details.get('machines_count', 0),
+                'severity'      : top,
+                'incidents_count': len(incidents),
+                'incident_logs' : incidents,
+            },
         })
 
     except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Erreur de décodage JSON'}, status=400)
+        return JsonResponse({'status': 'error', 'message': 'JSON invalide'}, status=400)
     except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'Erreur lors de la détection de proximité : {e}'}, status=500)
-
-
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 @csrf_exempt
 def api_proximity_detection_batch(request):
     """API endpoint pour traiter plusieurs images en batch (proximité)."""
@@ -2194,3 +2291,63 @@ def api_panic_detection(request):
         return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Erreur detection panique : {e}'}, status=500)
+    
+
+
+# ── /api/chat/ ──────────────────────────────────────────────────────────────
+@csrf_exempt
+def api_chat(request):
+    """API endpoint pour le chatbot SafeBot (OpenRouter)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        user_message = data.get('message', '')
+
+        if not user_message:
+            return JsonResponse({'status': 'error', 'message': 'Message vide'}, status=400)
+
+        # On lit la clé ICI, avec un défaut vide pour ne pas crasher si elle manque
+        api_key = config('OPENROUTER_API_KEY', default='')
+        
+        if not api_key:
+            return JsonResponse({'status': 'error', 'message': 'Clé API OpenRouter non configurée dans le fichier .env'}, status=500)
+
+        # Appel à l'API OpenRouter
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://127.0.0.1:8000",
+            "X-Title": "SafeVision AI"
+        }
+        
+        system_prompt = """
+        Tu es SafeBot, un assistant expert en santé et sécurité au travail, spécifiquement en Tunisie. 
+        Tu connais parfaitement le Code du Travail tunisien, les normes de la CNAMPH, et les réglementations de l'INORPI.
+        Tu réponds de manière professionnelle, claire et concise. Si on te pose une question hors sujet, 
+        rappelle poliment que tu es spécialisé dans la sécurité au travail en Tunisie.
+        """
+
+        payload = {
+            "model": "meta-llama/llama-3-8b-instruct", 
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        
+        result = response.json()
+        bot_reply = result['choices'][0]['message']['content']
+
+        return JsonResponse({'status': 'success', 'reply': bot_reply})
+
+    except requests.exceptions.RequestException as e:
+        print(f"[SafeBot] OpenRouter API Error: {e}")
+        return JsonResponse({'status': 'error', 'message': 'Erreur de connexion à l\'IA'}, status=500)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur interne : {e}'}, status=500)
