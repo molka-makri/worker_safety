@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Django
+*.log
+local_settings.py
+/media/*
+!/media/.gitkeep
+/staticfiles/
+db.sqlite3
+
+# AI model weights
+/models/*
+!/models/.gitkeep
+
+# Environment variables
+.env
+.env.local
+
+
+*.pt
+*.pth
+*.mp4
+*.avi
+runs/
+db.sqlite3
+test_yolo.py
+test_sign_video.py
