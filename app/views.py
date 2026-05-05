@@ -8,10 +8,12 @@ from django.http import JsonResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Avg, Count, Max, Sum
 from django.conf import settings
+from django.utils import timezone
 import json
 from datetime import datetime, timedelta
 import random
 import os
+from urllib.parse import urljoin
 from .models import Module, Alert, Detection
 from .forms import SignUpForm
 import cv2
@@ -33,6 +35,8 @@ from .worker_tracking_detector import detect_worker_tracking_in_frame
 from decouple import config
 import requests
 from django.views.decorators.csrf import csrf_exempt
+
+SMS_EVENT_CACHE = {}
 
 MODULE_SLUG_MAP = {
     'ppe': {
@@ -454,6 +458,7 @@ class AlertsView(TemplateView):
         context = super().get_context_data(**kwargs)
         context['app_name'] = 'Alertes SafeVision'
         context['alerts']   = Alert.objects.order_by('-timestamp')[:25]
+        context['modules']  = Module.objects.all()
         return context
 
 
@@ -1036,6 +1041,108 @@ def _save_detection_capture(frame, event_type, camera, confidence, details=None,
     }
 
 
+def _public_media_url(relative_or_media_url):
+    public_base_url = config('PUBLIC_BASE_URL', default='').strip()
+    if not public_base_url or not relative_or_media_url:
+        return ''
+
+    clean_path = str(relative_or_media_url).lstrip('/')
+    return urljoin(public_base_url.rstrip('/') + '/', clean_path)
+
+
+def _sms_cooldown_active(event_key):
+    cooldown_seconds = int(config('TWILIO_SMS_COOLDOWN_SECONDS', default='300') or 300)
+    now = timezone.now()
+    last_sent_at = SMS_EVENT_CACHE.get(event_key)
+    if last_sent_at and (now - last_sent_at).total_seconds() < cooldown_seconds:
+        return True
+    return False
+
+
+def _mark_sms_sent(event_key):
+    SMS_EVENT_CACHE[event_key] = timezone.now()
+
+
+def _send_twilio_sms(body, media_url=None):
+    account_sid = config('TWILIO_ACCOUNT_SID', default='').strip()
+    auth_token = config('TWILIO_AUTH_TOKEN', default='').strip()
+    to_number = config('TWILIO_TO_NUMBER', default='').strip()
+    from_number = config('TWILIO_FROM_NUMBER', default='').strip()
+    messaging_service_sid = config('TWILIO_MESSAGING_SERVICE_SID', default='').strip()
+
+    if not account_sid or not auth_token or not to_number:
+        return {
+            'sent': False,
+            'reason': 'Twilio non configure: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN et TWILIO_TO_NUMBER sont requis.',
+        }
+    if not from_number and not messaging_service_sid:
+        return {
+            'sent': False,
+            'reason': 'Twilio non configure: TWILIO_FROM_NUMBER ou TWILIO_MESSAGING_SERVICE_SID est requis.',
+        }
+
+    payload = {
+        'To': to_number,
+        'Body': body,
+    }
+    if messaging_service_sid:
+        payload['MessagingServiceSid'] = messaging_service_sid
+    else:
+        payload['From'] = from_number
+    if media_url and config('TWILIO_SEND_MEDIA_URL', default='False').lower() in ('1', 'true', 'yes', 'on'):
+        payload['MediaUrl'] = media_url
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
+    try:
+        response = requests.post(url, data=payload, auth=(account_sid, auth_token), timeout=8)
+        if response.status_code >= 400:
+            return {
+                'sent': False,
+                'status_code': response.status_code,
+                'reason': response.text[:500],
+            }
+        result = response.json()
+        return {
+            'sent': True,
+            'sid': result.get('sid'),
+            'status': result.get('status'),
+            'media_attached': bool(payload.get('MediaUrl')),
+        }
+    except requests.exceptions.RequestException as exc:
+        return {'sent': False, 'reason': str(exc)}
+
+
+def _notify_fall_sms(alert, camera, confidence, capture_meta):
+    event_key = f"fall:{camera}"
+    if _sms_cooldown_active(event_key):
+        alert.details = {
+            **(alert.details or {}),
+            'sms': {'sent': False, 'reason': 'cooldown actif'},
+        }
+        alert.save(update_fields=['details'])
+        return alert.details['sms']
+
+    capture_url = capture_meta.get('capture_url')
+    public_capture_url = _public_media_url(capture_url)
+    message = (
+        f"ALERTE CHUTE SafeVision: chute detectee sur {str(camera).upper()} "
+        f"(confiance {confidence:.0%})."
+    )
+    if public_capture_url:
+        message = f"{message} Capture: {public_capture_url}"
+
+    sms_result = _send_twilio_sms(message, media_url=public_capture_url)
+    if sms_result.get('sent'):
+        _mark_sms_sent(event_key)
+    alert.details = {
+        **(alert.details or {}),
+        'sms': sms_result,
+        'public_capture_url': public_capture_url,
+    }
+    alert.save(update_fields=['details'])
+    return sms_result
+
+
 def _get_module_by_name(*names):
     """Cherche un module par plusieurs noms possibles (ordre de priorité)."""
     for name in names:
@@ -1210,6 +1317,8 @@ def api_fall_detection(request):
 
         fall_detected, confidence, details = detect_fall_in_frame(frame)
 
+        sms_result = None
+        capture_meta = {}
         module = _get_module_by_name('fall', 'fatigue')
         if module:
             capture_meta = _save_detection_capture(
@@ -1232,7 +1341,7 @@ def api_fall_detection(request):
             )
 
             if fall_detected:
-                Alert.objects.create(
+                alert = Alert.objects.create(
                     module      = module,
                     severity    = 'critical',
                     title       = 'Chute détectée !',
@@ -1246,12 +1355,16 @@ def api_fall_detection(request):
                         **capture_meta,
                     },
                 )
+                sms_result = _notify_fall_sms(alert, data.get('camera', 'cam1'), confidence, capture_meta)
 
         return JsonResponse({
             'status':        'success',
             'fall_detected': bool(fall_detected),
             'confidence':    float(confidence),
-            'details':       details,
+            'details':       {**details, **capture_meta} if fall_detected else details,
+            'capture_url':   capture_meta.get('capture_url') if fall_detected else None,
+            'public_capture_url': _public_media_url(capture_meta.get('capture_url')) if fall_detected else None,
+            'sms':           sms_result,
             'message':       'Analyse de chute terminée',
         })
 
