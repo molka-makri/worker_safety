@@ -32,6 +32,10 @@ from .sign_detector import detect_sign_in_image
 from .posture_detector import detect_posture_in_frame
 from .panic_detector import detect_panic_in_frame
 from .worker_tracking_detector import detect_worker_tracking_in_frame
+from .fire_smoke_detector import detect_fire_smoke_in_frame
+from decouple import config
+import requests
+from django.views.decorators.csrf import csrf_exempt
 
 SMS_EVENT_CACHE = {}
 
@@ -323,27 +327,26 @@ MODULE_PAGE_CONFIG.update({
         'page_title': 'Feu & Fumee',
         'page_subtitle': 'Detection incendie, fumee et changement lumiere',
         'description': 'Module incendie et changements lumineux. Flux configurable.',
-        'cameras': [],
+        'cameras': [
+            {
+                'id': 12,
+                'name': 'CAM 12 - Detection Feu & Fumee',
+                'source': '/media/fire.mp4',
+                'file_label': 'fire.mp4',
+                'status_id': 'cam12-fire-status',
+                'chips': [
+                    {'label': 'FIRE', 'color': '#FF3B2F', 'rgb': '255,59,47'},
+                    {'label': 'SMOKE', 'color': '#FFB800', 'rgb': '255,184,0'},
+                ],
+            },
+        ],
     },
     'machinery': {
-    'page_title': 'Machines & Proximite',
-    'page_subtitle': 'Detection de proximite homme-machine — YOLO11l',
-    'description': 'Surveillance des zones dangereuses autour des machines. Detection en temps reel de la distance ouvrier-engin avec alertes critiques.',
-    'cameras': [
-        {
-            'id': 11,
-            'name': 'CAM 11 - Proximite Homme-Machine',
-            'source': '/media/Media_Proximity/vid3.mp4',
-            'file_label': 'vid3.mp4',
-            'status_id': 'cam11-proximity-status',
-            'chips': [
-                {'label': 'WORKER',    'color': '#4AE3B5', 'rgb': '74,227,181'},
-                {'label': 'MACHINE',   'color': '#FF6B00', 'rgb': '255,107,0'},
-                {'label': 'PROXIMITY', 'color': '#E040FB', 'rgb': '224,64,251'},
-            ],
-        },
-    ],
-},
+        'page_title': 'Machines & Proximite',
+        'page_subtitle': 'Detection de proximite homme-machine',
+        'description': 'Surveillance des zones dangereuses autour des machines.',
+        'cameras': [],
+    },
 })
 MODULE_PAGE_CONFIG['spill'] = MODULE_PAGE_CONFIG['hazards']
 MODULE_PAGE_CONFIG['manhole'] = MODULE_PAGE_CONFIG['hazards']
@@ -561,8 +564,8 @@ class ReportsView(TemplateView):
             'axis': 'Axes 7 + 8',
             'stack': 'Detection incendie / changement lumiere',
             'goal': 'Identifier fumee, feu, flash et changement brutal de luminosite.',
-            'cameras': ['Camera incendie - source configurable'],
-            'model_files': [],
+            'cameras': ['CAM 12 - fire.mp4'],
+            'model_files': ['fire_smoke_detection.pt'],
             'pipeline': ['Capture scene', 'Analyse fumee/feu', 'Filtrage lumiere', 'Alerte incendie'],
             'strengths': ['Couverture securite vitale', 'Extension optique possible', 'Integration alertes'],
             'impact': 'Acceleration du temps de reaction en cas d incendie.',
@@ -596,6 +599,8 @@ class ReportsView(TemplateView):
             ('ppe_violation', 'Violation EPI'),
             ('sign_defect_detected', 'Signalisation'),
             ('proximity_detected', 'Proximite'),
+            ('fire_detected', 'Feu/Fumee'),
+            ('smoke_detected', 'Feu/Fumee'),
         ]
         for key, label in checks:
             if key in details:
@@ -619,6 +624,8 @@ class ReportsView(TemplateView):
             return 'sign'
         if 'proximity_detected' in details or (module and module.id == 7):
             return 'proximity'
+        if 'fire_detected' in details or 'smoke_detected' in details:
+            return 'fire'
         return 'generic'
 
     def _capture_card(self, det):
@@ -639,6 +646,7 @@ class ReportsView(TemplateView):
             'ppe': 'Violation EPI detectee',
             'sign': 'Signalisation defectueuse',
             'proximity': 'Proximite machine',
+            'fire': 'Feu/Fumee detecte',
             'generic': kind,
         }
         stack_map = {
@@ -650,6 +658,7 @@ class ReportsView(TemplateView):
             'ppe': 'YOLO PPE ppe.pt',
             'sign': 'ResNet50 signalisation',
             'proximity': 'Detection proximite',
+            'fire': 'YOLO fire_smoke_detection.pt',
             'generic': 'Analyse SafeVision',
         }
         accent_map = {
@@ -661,6 +670,7 @@ class ReportsView(TemplateView):
             'ppe': '#4AE3B5',
             'sign': '#7B61FF',
             'proximity': '#E040FB',
+            'fire': '#FF3B2F',
             'generic': '#2979FF',
         }
 
@@ -691,6 +701,13 @@ class ReportsView(TemplateView):
             badges = ['EXIT', 'Obstacle', f"{int(details.get('confidence', det.confidence or 0) * 100)}%"]
         elif visual == 'proximity':
             badges = ['Machine', 'Distance critique']
+        elif visual == 'fire':
+            if details.get('fire_detected'):
+                badges = ['FIRE', f"{int((details.get('confidence', det.confidence or 0)) * 100)}%"]
+            elif details.get('smoke_detected'):
+                badges = ['SMOKE', f"{int((details.get('confidence', det.confidence or 0)) * 100)}%"]
+            else:
+                badges = ['Alerte incendie']
         else:
             badges = [kind, det.module.name[:18]]
 
@@ -871,6 +888,7 @@ class ModuleDetailView(TemplateView):
             is_posture = 'posture_unsafe' in details
             is_panic = 'panic_detected' in details
             is_worker_tracking = 'worker_tracking_detected' in details
+            is_fire = 'fire_detected' in details or 'smoke_detected' in details
             detected = bool(det.count)
             kind = (
                 'Fatigue' if is_fatigue else
@@ -883,6 +901,7 @@ class ModuleDetailView(TemplateView):
                 'Proximite' if is_proximity else
                 'Posture' if is_posture else
                 'Panique' if is_panic else
+                'Feu/Fumee' if is_fire else
                 'Worker Tracking' if is_worker_tracking else
                 details.get('class', 'Detection')
             )
@@ -897,6 +916,7 @@ class ModuleDetailView(TemplateView):
                 'CAM 8' if is_proximity or is_worker_tracking else
                 'CAM 9' if is_posture else
                 'CAM 10' if is_panic else
+                'CAM 12' if is_fire else
                 'Module'
             )
             confidence_pct = int(round((det.confidence or 0) * 100))
@@ -1013,6 +1033,7 @@ def _save_detection_capture(frame, event_type, camera, confidence, details=None,
         'ppe': (181, 227, 74),
         'sign_defect': (255, 97, 123),
         'proximity': (251, 64, 224),
+        'fire': (47, 59, 255),
     }
     color = color_map.get(event_type, (255, 194, 0))
 
@@ -1215,6 +1236,7 @@ def _detection_to_event(det):
     is_posture = 'posture_unsafe' in details
     is_panic = 'panic_detected' in details
     is_worker_tracking = 'worker_tracking_detected' in details
+    is_fire = 'fire_detected' in details or 'smoke_detected' in details
     event_type = (
         'fatigue' if is_fatigue else
         'fall' if is_fall else
@@ -1226,6 +1248,7 @@ def _detection_to_event(det):
         'proximity' if is_proximity else
         'posture' if is_posture else
         'panic' if is_panic else
+        'fire' if is_fire else
         'worker_tracking' if is_worker_tracking else
         'detection'
     )
@@ -1240,6 +1263,7 @@ def _detection_to_event(det):
         'cam8' if is_proximity or is_worker_tracking else
         'cam9' if is_posture else
         'cam10' if is_panic else
+        'cam12' if is_fire else
         'module'
     )
     return {
@@ -1688,7 +1712,6 @@ def api_proximity_detection(request):
             return JsonResponse({'status': 'error', 'message': 'Image requise'}, status=400)
         try:
             frame = _decode_image(data['image'])
-
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': f'Décodage: {e}'}, status=400)
 
@@ -1759,8 +1782,96 @@ def api_proximity_detection(request):
         return JsonResponse({'status':'error','message':'JSON invalide'},status=400)
     except Exception as e:
         return JsonResponse({'status':'error','message':str(e)},status=500)
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
 
+    try:
+        data = json.loads(request.body)
 
+        if 'image' not in data:
+            return JsonResponse(
+                {'status': 'error', 'message': 'Image requise'}, status=400)
+
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse(
+                {'status': 'error', 'message': f'Erreur décodage : {e}'}, status=400)
+
+        # ── Détection ────────────────────────────────────────────────────────
+        from .proximity_detector import proximity_detector as _pd
+        proximity_detected, confidence, details = _pd.detect_proximity(frame)
+
+        # ── Annotation visuelle ───────────────────────────────────────────────
+        annotated = _pd.annotate_frame(frame.copy(), details)
+        _, buf     = cv2.imencode('.jpg', annotated,
+                                  [cv2.IMWRITE_JPEG_QUALITY, 88])
+        annotated_b64 = ('data:image/jpeg;base64,'
+                         + base64.b64encode(buf).decode('utf-8'))
+
+        # ── Persistance ───────────────────────────────────────────────────────
+        incidents = details.get('incident_logs', [])
+        module    = _get_module_by_name('machinery', 'proximity')
+        if module:
+            capture_meta = _save_detection_capture(
+                frame, 'proximity', data.get('camera', 'cam8'), confidence, details, 'PROXIMITE'
+            ) if proximity_detected else {}
+            Detection.objects.create(
+                module     = module,
+                confidence = confidence,
+                count      = len(incidents),
+                details    = {
+                    'proximity_detected': proximity_detected,
+                    'confidence'        : confidence,
+                    'camera'            : data.get('camera', 'cam8'),
+                    'workers_count'     : details.get('workers_count', 0),
+                    'machines_count'    : details.get('machines_count', 0),
+                    'incidents'         : len(incidents),
+                },
+            )
+            if proximity_detected and incidents:
+                sev  = incidents[0].get('severity', 'alert')
+                dist = incidents[0].get('distance_m', 0)
+                Alert.objects.create(
+                    module      = module,
+                    severity    = sev,
+                    title       = f'Proximité dangereuse ! ({dist:.1f}m)',
+                    description = (f'Ouvrier à {dist:.1f}m d\'un engin'),
+                    details     = {
+                        'distance'  : dist,
+                        'severity'  : sev,
+                        'camera'    : data.get('camera', 'CAM 8'),
+                        'event_type': 'proximity',
+                        'timestamp' : datetime.now().isoformat(),
+                    },
+                )
+
+        # ── Sévérité maximale ─────────────────────────────────────────────────
+        order = ['safe', 'vigilance', 'alert', 'critical']
+        top   = max(
+            [i.get('severity', 'safe') for i in incidents],
+            key=lambda s: order.index(s) if s in order else 0,
+            default='safe'
+        )
+
+        return JsonResponse({
+            'status'            : 'success',
+            'proximity_detected': bool(proximity_detected),
+            'confidence'        : round(float(confidence), 3),
+            'annotated_image'   : annotated_b64,
+            'details'           : {
+                'workers_count' : details.get('workers_count', 0),
+                'machines_count': details.get('machines_count', 0),
+                'severity'      : top,
+                'incidents_count': len(incidents),
+                'incident_logs' : incidents,
+            },
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'JSON invalide'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 @csrf_exempt
 def api_proximity_detection_batch(request):
     """API endpoint pour traiter plusieurs images en batch (proximité)."""
@@ -2103,6 +2214,84 @@ def api_blocked_exit_detection(request):
         return JsonResponse({'status': 'error', 'message': f'Erreur detection sortie de secours : {e}'}, status=500)
 
 
+def api_fire_detection(request):
+    """API endpoint pour la detection de feu et fumee (CAM 12)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Methode non autorisee'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        if 'image' not in data:
+            return JsonResponse({'status': 'error', 'message': 'Image requise pour la detection incendie'}, status=400)
+
+        try:
+            frame = _decode_image(data['image'])
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Erreur de decodage image : {e}'}, status=400)
+
+        camera = data.get('camera', 'cam12')
+        incident_detected, confidence, details = detect_fire_smoke_in_frame(frame, camera=camera)
+        fire_detected = bool(details.get('fire_detected', False))
+        smoke_detected = bool(details.get('smoke_detected', False))
+
+        module = get_module_by_slug('fire')
+        if module:
+            capture_meta = _save_detection_capture(
+                frame, 'fire', camera, confidence, details, 'FEU/FUMEE'
+            ) if incident_detected else {}
+            Detection.objects.create(
+                module=module,
+                confidence=confidence,
+                count=1 if incident_detected else 0,
+                details={
+                    'fire_detected': fire_detected,
+                    'smoke_detected': smoke_detected,
+                    'confidence': confidence,
+                    'camera': camera,
+                    'bbox': details.get('bbox'),
+                    'detections': details.get('detections', []),
+                    'primary_type': details.get('primary_type', 'other'),
+                    'frame_shape': list(map(int, frame.shape)),
+                    'model_version': '1.0.0',
+                    'model_available': details.get('model_available', False),
+                    **capture_meta,
+                },
+            )
+
+            if incident_detected:
+                severity = 'critical' if fire_detected else 'warning'
+                event_label = 'Feu detecte' if fire_detected else 'Fumee detectee'
+                Alert.objects.create(
+                    module=module,
+                    severity=severity,
+                    title='Alerte incendie detectee !',
+                    description=f'{event_label} sur {camera.upper()} (confiance {confidence:.2%})',
+                    details={
+                        'confidence': confidence,
+                        'camera': camera,
+                        'event_type': 'fire',
+                        'fire_detected': fire_detected,
+                        'smoke_detected': smoke_detected,
+                        'timestamp': datetime.now().isoformat(),
+                        **capture_meta,
+                    },
+                )
+
+        return JsonResponse({
+            'status': 'success',
+            'fire_detected': bool(incident_detected),
+            'smoke_detected': smoke_detected,
+            'confidence': float(confidence),
+            'details': details,
+            'model_available': details.get('model_available', False),
+            'message': 'Analyse feu/fumee terminee',
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur detection incendie : {e}'}, status=500)
+
+
 # ── /api/posture-detection/ — CAM 9 ──────────────────────────────────────────
 
 def api_posture_detection(request):
@@ -2327,3 +2516,63 @@ def api_panic_detection(request):
         return JsonResponse({'status': 'error', 'message': 'Erreur de decodage JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Erreur detection panique : {e}'}, status=500)
+    
+
+
+# ── /api/chat/ ──────────────────────────────────────────────────────────────
+@csrf_exempt
+def api_chat(request):
+    """API endpoint pour le chatbot SafeBot (OpenRouter)."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        user_message = data.get('message', '')
+
+        if not user_message:
+            return JsonResponse({'status': 'error', 'message': 'Message vide'}, status=400)
+
+        # On lit la clé ICI, avec un défaut vide pour ne pas crasher si elle manque
+        api_key = config('OPENROUTER_API_KEY', default='')
+        
+        if not api_key:
+            return JsonResponse({'status': 'error', 'message': 'Clé API OpenRouter non configurée dans le fichier .env'}, status=500)
+
+        # Appel à l'API OpenRouter
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://127.0.0.1:8000",
+            "X-Title": "SafeVision AI"
+        }
+        
+        system_prompt = """
+        Tu es SafeBot, un assistant expert en santé et sécurité au travail, spécifiquement en Tunisie. 
+        Tu connais parfaitement le Code du Travail tunisien, les normes de la CNAMPH, et les réglementations de l'INORPI.
+        Tu réponds de manière professionnelle, claire et concise. Si on te pose une question hors sujet, 
+        rappelle poliment que tu es spécialisé dans la sécurité au travail en Tunisie.
+        """
+
+        payload = {
+            "model": "meta-llama/llama-3-8b-instruct", 
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        
+        result = response.json()
+        bot_reply = result['choices'][0]['message']['content']
+
+        return JsonResponse({'status': 'success', 'reply': bot_reply})
+
+    except requests.exceptions.RequestException as e:
+        print(f"[SafeBot] OpenRouter API Error: {e}")
+        return JsonResponse({'status': 'error', 'message': 'Erreur de connexion à l\'IA'}, status=500)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur interne : {e}'}, status=500)

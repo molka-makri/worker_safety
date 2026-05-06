@@ -36,29 +36,36 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
         <span class="panel-title">Flux Vidéo — Analyse en cours</span>
       </div>
 
-      {% if module_cameras %}
+      {% if module_slug == 'proximity' or module_slug == 'machinery' %}
       <div class="live-grid" id="live-grid" style="padding: 12px; gap: 10px">
-        {% for camera in module_cameras %}
-        <div class="cam-tile" id="cam-tile-{{ camera.id }}">
+        <!-- CAM 11 — Proximité Homme-Machine -->
+        <div class="cam-tile" id="cam-tile-11">
           <div class="cam-header">
             <div class="status-dot active"></div>
-            <span>{{ camera.name }}</span>
+            <span>CAM 11 — Proximité Homme-Machine</span>
+            <span
+              style="
+                margin-left: auto;
+                font-family: var(--font-mono);
+                font-size: 10px;
+                color: var(--text-muted);
+              "
+              >YOLO Proximité</span
+            >
           </div>
           <div class="cam-feed">
             <video
-              id="cam{{ camera.id }}-video"
+              id="cam11-video"
               class="cam-video"
-              src="{{ camera.source }}"
+              src="/media/Media_Proximity/vid3.mp4"
               muted
               loop
               playsinline
               preload="auto"></video>
             <canvas
-              id="cam{{ camera.id }}-overlay-canvas"
+              id="cam11-overlay-canvas"
               class="cam-overlay-canvas"></canvas>
-            <div
-              class="cam-video-overlay"
-              id="cam{{ camera.id }}-video-overlay">
+            <div class="cam-video-overlay">
               <div
                 style="
                   display: flex;
@@ -68,12 +75,12 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
                   width: 100%;
                 ">
                 <span style="font-size: 10px; font-family: var(--font-mono)"
-                  >Fichier: {{ camera.file_label }}</span
+                  >vid3.mp4</span
                 >
                 <span
                   style="font-size: 10px; font-family: var(--font-mono)"
-                  id="{{ camera.status_id }}"
-                  >Detection: en attente...</span
+                  id="cam11-proximity-status"
+                  >Détection: en attente…</span
                 >
               </div>
             </div>
@@ -94,26 +101,18 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
               "
               >MODULES:</span
             >
-            {% for chip in camera.chips %}
             <span
               class="toggle-chip on"
-              style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px"
-              >{{ chip.label }}</span
-            >
-            {% endfor %} {% if camera.secondary_status_id %}
-            <span
               style="
-                font-size: 10px;
-                font-family: var(--font-mono);
-                margin-left: auto;
+                --chip-color: #E040FB;
+                --chip-rgb: 224, 64, 251;
+                font-size: 9px;
+                padding: 2px 6px;
               "
-              id="{{ camera.secondary_status_id }}"
-              >Detection: en attente...</span
+              >PROXIMITÉ</span
             >
-            {% endif %}
           </div>
         </div>
-        {% endfor %}
       </div>
       {% elif module_slug == 'fatigue' or module_slug == 'fall' or module_slug
       == 'falling' %}
@@ -450,7 +449,85 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
           </div>
         </div>
       </div>
-
+      {% elif module_cameras %}
+      <div class="live-grid" id="live-grid" style="padding: 12px; gap: 10px">
+        {% for camera in module_cameras %}
+        <div class="cam-tile" id="cam-tile-{{ camera.id }}">
+          <div class="cam-header">
+            <div class="status-dot active"></div>
+            <span>{{ camera.name }}</span>
+          </div>
+          <div class="cam-feed">
+            <video
+              id="cam{{ camera.id }}-video"
+              class="cam-video"
+              src="{{ camera.source }}"
+              muted
+              loop
+              playsinline
+              preload="auto"></video>
+            <canvas
+              id="cam{{ camera.id }}-overlay-canvas"
+              class="cam-overlay-canvas"></canvas>
+            <div
+              class="cam-video-overlay"
+              id="cam{{ camera.id }}-video-overlay">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  gap: 10px;
+                  width: 100%;
+                ">
+                <span style="font-size: 10px; font-family: var(--font-mono)"
+                  >Fichier: {{ camera.file_label }}</span
+                >
+                <span
+                  style="font-size: 10px; font-family: var(--font-mono)"
+                  id="{{ camera.status_id }}"
+                  >Detection: en attente...</span
+                >
+              </div>
+            </div>
+          </div>
+          <div
+            style="
+              padding: 8px 12px;
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+              border-top: 1px solid var(--bg-border);
+            ">
+            <span
+              style="
+                font-size: 9px;
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+              "
+              >MODULES:</span
+            >
+            {% for chip in camera.chips %}
+            <span
+              class="toggle-chip on"
+              style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px"
+              >{{ chip.label }}</span
+            >
+            {% endfor %} {% if camera.secondary_status_id %}
+            <span
+              style="
+                font-size: 10px;
+                font-family: var(--font-mono);
+                margin-left: auto;
+              "
+              id="{{ camera.secondary_status_id }}"
+              >Detection: en attente...</span
+            >
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
       {% else %}
       <div class="video-placeholder">
         <svg
@@ -720,6 +797,7 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
         cam8: "CAM 8",
         cam9: "CAM 9",
         cam10: "CAM 10",
+        cam11: "CAM 11",
       }[cam] || "Caméra"
     );
   }
