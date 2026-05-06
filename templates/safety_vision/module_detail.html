@@ -73,7 +73,7 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
                 <span
                   style="font-size: 10px; font-family: var(--font-mono)"
                   id="{{ camera.status_id }}"
-                  >Detection: en attente...</span
+                  >{{ camera.status_text|default:"Detection: en attente..." }}</span
                 >
               </div>
             </div>

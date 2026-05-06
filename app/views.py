@@ -320,8 +320,34 @@ MODULE_PAGE_CONFIG.update({
     'tracking': {
         'page_title': 'Tracking & Objets',
         'page_subtitle': 'Suivi presence, trajectoires et objets tombants',
-        'description': 'Module de suivi et de comptage. Flux configurable.',
-        'cameras': [],
+        'description': 'Module de suivi, de comptage et de visualisation des objets en mouvement.',
+        'cameras': [
+            {
+                'id': 8,
+                'name': 'CAM 8 - Worker Tracking',
+                'source': '/media/tracking_workers.mp4',
+                'file_label': 'tracking_workers.mp4',
+                'status_id': 'cam8-worker-status',
+                'chips': [
+                    {'label': 'TRACKING', 'color': '#00C2FF', 'rgb': '0,194,255'},
+                    {'label': 'WORKERS', 'color': '#4AE3B5', 'rgb': '74,227,181'},
+                    {'label': 'COUNTING', 'color': '#FF6B00', 'rgb': '255,107,0'},
+                ],
+            },
+            {
+                'id': 13,
+                'name': 'CAM 13 - Debris Tracking',
+                'source': '/media/debris_tracking.mp4',
+                'file_label': 'debris_tracking.mp4',
+                'status_id': 'cam13-debris-status',
+                'status_text': 'Flux video uniquement',
+                'chips': [
+                    {'label': 'TRACKING', 'color': '#00C2FF', 'rgb': '0,194,255'},
+                    {'label': 'DEBRIS', 'color': '#FFB800', 'rgb': '255,184,0'},
+                    {'label': 'VIDEO', 'color': '#4AE3B5', 'rgb': '74,227,181'},
+                ],
+            },
+        ],
     },
     'fire': {
         'page_title': 'Feu & Fumee',
@@ -345,7 +371,20 @@ MODULE_PAGE_CONFIG.update({
         'page_title': 'Machines & Proximite',
         'page_subtitle': 'Detection de proximite homme-machine',
         'description': 'Surveillance des zones dangereuses autour des machines.',
-        'cameras': [],
+        'cameras': [
+            {
+                'id': 11,
+                'name': 'CAM 11 - Proximite Homme-Machine',
+                'source': '/media/Media_Proximity/vid3.mp4',
+                'file_label': 'vid3.mp4',
+                'status_id': 'cam11-proximity-status',
+                'chips': [
+                    {'label': 'WORKER', 'color': '#4AE3B5', 'rgb': '74,227,181'},
+                    {'label': 'MACHINE', 'color': '#FF6B00', 'rgb': '255,107,0'},
+                    {'label': 'PROXIMITY', 'color': '#00C2FF', 'rgb': '0,194,255'},
+                ],
+            },
+        ],
     },
 })
 MODULE_PAGE_CONFIG['spill'] = MODULE_PAGE_CONFIG['hazards']

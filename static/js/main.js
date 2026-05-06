@@ -1,5 +1,5 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SAFEVISION AI — main.js  (v6 — 10 cameras, Worker Tracking + Posture + Panic)
+// SAFEVISION AI — main.js  (v6 — multi-camera, Worker Tracking + Posture + Panic)
 // CAM 1 : Détection de chute   (worker_falling3.mp4)
 // CAM 2 : Détection de fatigue (worker_tired.mp4)
 // CAM 3 : Spill detection      (spill.mp4)
@@ -10,6 +10,7 @@
 // CAM 8 : Worker tracking      (tracking_workers.mp4)
 // CAM 9 : Posture detection    (posture.mp4)
 // CAM 10: Panic detection      (panic.mp4)
+// CAM 13: Debris tracking      (debris_tracking.mp4, video only)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 // ── HORLOGE LIVE ─────────────────────────────────────────
@@ -40,6 +41,7 @@ const LIVE_VIDEO_SRC_CAM8_PROXIMITY = "/media/Media_Proximity/vid3.mp4";
 const LIVE_VIDEO_SRC_CAM9 = "/media/posture.mp4";
 const LIVE_VIDEO_SRC_CAM10 = "/media/panic.mp4";
 const LIVE_VIDEO_SRC_CAM12 = "/media/fire.mp4";
+const LIVE_VIDEO_SRC_CAM13 = "/media/debris_tracking.mp4";
 const DASHBOARD_PPE_SPILL_SRC = "/media/ppe_spill.mp4";
 const DASHBOARD_SPILL_FALL_SRC = "/media/spill_fall.mp4";
 const VIDEO_CAPTURE_MAX_WIDTH = 960;
@@ -217,7 +219,9 @@ function clearAllOverlayCanvases() {
     "cam8",
     "cam9",
     "cam10",
+    "cam11",
     "cam12",
+    "cam13",
   ].forEach((id) => clearOverlayCanvas(`${id}-overlay-canvas`));
 }
 
@@ -2432,6 +2436,11 @@ function updateCam12Status(text) {
   if (el) el.textContent = "Detection: " + text;
 }
 
+function updateCam13Status(text) {
+  const el = document.getElementById("cam13-debris-status");
+  if (el) el.textContent = text;
+}
+
 function drawFireOverlay(canvasId, details, video, fireDetected, smokeDetected) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
@@ -3402,6 +3411,7 @@ function initializeCameras() {
     ["cam9-video", LIVE_VIDEO_SRC_CAM9, updateCam9Status],
     ["cam10-video", LIVE_VIDEO_SRC_CAM10, updateCam10Status],
     ["cam12-video", LIVE_VIDEO_SRC_CAM12, updateCam12Status],
+    ["cam13-video", LIVE_VIDEO_SRC_CAM13, updateCam13Status],
   ].forEach(([id, src, statusFn]) => {
     const v = document.getElementById(id);
     if (v) {
@@ -3444,6 +3454,31 @@ function _startCamWithLoop(id, src, startFn) {
   };
 }
 
+function _startCamVideoOnly(id, src, statusFn) {
+  const v = document.getElementById(id);
+  if (!v) return;
+  v.dataset.shouldRun = "1";
+  v.src = src + "?v=" + Date.now();
+  v.currentTime = 0;
+  const startPlayback = () => {
+    if (!camerasRunning || v.dataset.shouldRun !== "1") return;
+    v.play()
+      .then(() => {
+        if (statusFn) statusFn("Flux actif");
+      })
+      .catch((err) => console.error(`[SafeVision] ${id} play:`, err));
+  };
+  v.load();
+  startPlayback();
+  v.onloadeddata = startPlayback;
+  v.oncanplay = startPlayback;
+  v.onended = () => {
+    if (!camerasRunning || v.dataset.shouldRun !== "1") return;
+    v.currentTime = 0;
+    v.play().catch(() => {});
+  };
+}
+
 function startCameras() {
   console.log("[SafeVision] startCameras()");
   camerasRunning = true;
@@ -3471,6 +3506,7 @@ function startCameras() {
   _startCamWithLoop("cam9-video", LIVE_VIDEO_SRC_CAM9, startCam9Detection);
   _startCamWithLoop("cam10-video", LIVE_VIDEO_SRC_CAM10, startCam10Detection);
   _startCamWithLoop("cam12-video", LIVE_VIDEO_SRC_CAM12, startCam12Detection);
+  _startCamVideoOnly("cam13-video", LIVE_VIDEO_SRC_CAM13, updateCam13Status);
   _startCamWithLoop(
     "cam11-video",
     LIVE_VIDEO_SRC_CAM8_PROXIMITY,
@@ -3507,6 +3543,7 @@ function stopCameras() {
     ["cam10-video", updateCam10Status, stopCam10Detection],
     ["cam11-video", updateCam11Status, stopCam11Detection],
     ["cam12-video", updateCam12Status, stopCam12Detection],
+    ["cam13-video", updateCam13Status, null],
   ].forEach(([id, statusFn, stopFn]) => {
     const v = document.getElementById(id);
     if (v) {
@@ -3516,7 +3553,7 @@ function stopCameras() {
       v.pause();
       statusFn("Camera arretee");
     }
-    stopFn();
+    if (stopFn) stopFn();
   });
 
   clearAllOverlayCanvases();
