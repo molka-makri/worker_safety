@@ -291,28 +291,28 @@ class ProximityDetector:
                 return
 
             cfg = {
-                'critical': {
-                    'bg'    : (0,  0, 200),
-                    'height': 72,
-                    'title' : '⚠  DANGER CRITIQUE  ⚠',
-                    'msg'   : f"OUVRIER #{w_idx+1} TROP PROCHE DE L'ENGIN #{m_idx+1}",
-                    'sub'   : f"Distance : {dm:.1f} m   —   Seuil de sécurité : {SEUIL_CRITIQUE:.0f} m",
-                },
-                'alert': {
-                    'bg'    : (0, 100, 220),
-                    'height': 58,
-                    'title' : '!  ZONE D\'ALERTE',
-                    'msg'   : f"Ouvrier #{w_idx+1} à {dm:.1f} m de l'engin #{m_idx+1}",
-                    'sub'   : f"Seuil d'alerte : {SEUIL_ALERTE:.0f} m",
-                },
-                'vigilance': {
-                    'bg'    : (0, 145, 145),
-                    'height': 50,
-                    'title' : 'VIGILANCE',
-                    'msg'   : f"Ouvrier #{w_idx+1} à {dm:.1f} m — Restez vigilant",
-                    'sub'   : '',
-                },
-            }.get(sev)
+    'critical': {
+        'bg'    : (0,  0, 200),
+        'height': 85,
+        'title' : '!  DANGER CRITIQUE  !',
+        'msg'   : f'OUVRIER #{w_idx+1} TROP PROCHE DE L ENGIN #{m_idx+1}',
+        'sub'   : f'Distance : {dm:.1f} m   |   Seuil de securite : {SEUIL_CRITIQUE:.0f} m',
+    },
+    'alert': {
+        'bg'    : (0, 100, 220),
+        'height': 60,
+        'title' : '!  ZONE D ALERTE  !',
+        'msg'   : f'Ouvrier #{w_idx+1} a {dm:.1f} m de l engin #{m_idx+1}',
+        'sub'   : f'Seuil alerte : {SEUIL_ALERTE:.0f} m',
+    },
+    'vigilance': {
+        'bg'    : (0, 145, 145),
+        'height': 50,
+        'title' : 'VIGILANCE',
+        'msg'   : f'Ouvrier #{w_idx+1} a {dm:.1f} m - Restez vigilant',
+        'sub'   : '',
+    },
+}.get(sev)
 
             if not cfg:
                 return
@@ -367,7 +367,8 @@ class ProximityDetector:
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.52, (180, 180, 180), 1)
 
-            brand = 'SafetyVision — Proximité Homme·Machine'
+            brand = 'SafetyVision - Proximite Homme-Machine'
+
             (tw, _), _ = cv2.getTextSize(
                 brand, cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)
             cv2.putText(img, brand,
