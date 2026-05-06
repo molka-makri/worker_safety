@@ -403,6 +403,17 @@ html, body {
   position: relative;
 }
 
+.dashboard-hybrid-streams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--bg-border);
+}
+
+.dashboard-hybrid-streams .video-feed {
+  min-width: 0;
+}
+
 .video-feed {
   width: 100%;
   aspect-ratio: 16/9;
@@ -437,6 +448,20 @@ html, body {
   color: var(--text-secondary);
   display: flex;
   gap: 12px;
+  z-index: 3;
+}
+
+.dashboard-main-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-hybrid-streams {
+    grid-template-columns: 1fr;
+  }
 }
 
 .rec-indicator {

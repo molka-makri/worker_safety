@@ -23,8 +23,14 @@ from .views import (
     api_manhole_detection,
     api_manhole_depth,
     api_blocked_exit_detection,
-    api_proximity_detection,  # ADDED PROXIMITY DETECTOR
-    api_proximity_detection_batch,  # ADDED PROXIMITY DETECTOR
+    api_fire_detection,
+    api_proximity_detection,
+    api_proximity_detection_batch,
+    api_posture_detection,   # CAM 9 — posture
+    api_panic_detection,     # CAM 10 — panic
+    api_worker_tracking_detection,
+    api_chat,
+
 )
 
 app_name = 'app'
@@ -64,8 +70,17 @@ urlpatterns = [
     path('api/manhole-detection/', api_manhole_detection, name='api_manhole_detection'),
     path('api/manhole-depth/', api_manhole_depth, name='api_manhole_depth'),
     path('api/blocked-exit-detection/', api_blocked_exit_detection, name='api_blocked_exit_detection'),
-    
+    path('api/fire-detection/', api_fire_detection, name='api_fire_detection'),
+
     # ── API — Détection de Proximité ───────────────────────
-    path('api/proximity-detection/', api_proximity_detection, name='api_proximity_detection'),  # ADDED PROXIMITY DETECTOR
-    path('api/proximity-detection/batch/', api_proximity_detection_batch, name='api_proximity_detection_batch'),  # ADDED PROXIMITY DETECTOR
+    path('api/proximity-detection/', api_proximity_detection, name='api_proximity_detection'),
+    path('api/proximity-detection/batch/', api_proximity_detection_batch, name='api_proximity_detection_batch'),
+
+    # ── API — Posture & Panique (CAM 9 / CAM 10) ──────────
+    path('api/posture-detection/', api_posture_detection, name='api_posture_detection'),
+    path('api/panic-detection/',   api_panic_detection,   name='api_panic_detection'),
+    
+    # ── API — Tracking travailleurs (CAM 8) ───────────────
+    path('api/worker-tracking-detection/', api_worker_tracking_detection, name='api_worker_tracking_detection'),
+     path('api/chat/', api_chat, name='api_chat'),
 ]
