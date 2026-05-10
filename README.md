@@ -12,14 +12,14 @@ A real-time **industrial worker safety monitoring platform** built with Django, 
 
 > 🎓 Developed as part of the **AI Project** module at **Esprit School of Engineering** — *Private Higher School of Engineering and Technology*.
 
-🔗 **Live Demo**: [View on Hugging Face Spaces](https://huggingface.co/spaces/molka8/worker-safety-dashboard) *(replace with your actual link)*
+🔗 **Live Demo**: [View on Hugging Face Spaces](https://huggingface.co/spaces/molka8/worker-safety-dashboard) 
 
 ---
 
 ## 📌 Overview
 
 This project was developed as part of the coursework for **AI Project**
-at **Private Higher School of Engineering and Technology — Esprit School of Engineering**.
+at **Esprit School of Engineering**.
 
 The platform aggregates over **13 AI safety detection modules** into a unified dashboard, enabling real-time monitoring of worker safety on industrial sites. It supports local execution as well as seamless deployment on Hugging Face Spaces via Docker.
 
@@ -106,7 +106,7 @@ worker_safety/
 ### 1. Clone the project
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/molka-makri/worker_safety.git
 cd worker_safety
 ```
 
@@ -249,6 +249,6 @@ python push_to_hf_space.py
 
 ## 🙏 Acknowledgments
 
-This project was completed under the guidance of the teaching staff of **Esprit School of Engineering** as part of the **AI Project** module at **Private Higher School of Engineering and Technology — Esprit School of Engineering**.
-
+This project was completed under the guidance of the teaching staff of **Esprit School of Engineering** as part of the **AI Project** module at **Esprit School of Engineering**.
+We would like to thank our professors for their guidance, support, and valuable feedback throughout the sessions that made this project possible.
 Special thanks to the open-source communities behind PyTorch, Ultralytics YOLO, OpenCV, MediaPipe, and Hugging Face for making this work possible.
