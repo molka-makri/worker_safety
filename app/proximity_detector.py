@@ -19,6 +19,7 @@ import base64
 
 import cv2
 import numpy as np
+from app.hf_model_store import ensure_model_file
 
 # ── Ultralytics YOLO ──────────────────────────────────────────────────────────
 try:
@@ -30,7 +31,7 @@ except ImportError:
 
 # ── Chemins modèle ────────────────────────────────────────────────────────────
 _BASE = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH          = os.path.join(_BASE, '..', 'models', 'proximity.pt')
+MODEL_PATH          = ensure_model_file('proximity.pt', aliases=['proximity_detection.pt', 'model_promimity_homme_machine.pt'])
 MODEL_PATH_FALLBACK = os.path.join(_BASE, '..', 'models', 'proximity_detection.pt')
 
 # ── Calibration & seuils ─────────────────────────────────────────────────────
@@ -55,6 +56,9 @@ class ProximityDetector:
     def __init__(self, model_path: str = None):
         self.model      = None
         self.model_path = os.path.abspath(model_path or MODEL_PATH)
+        self.class_names = {}
+        self.worker_class_ids = {0}
+        self.machine_class_ids = {1}
 
         if not YOLO_AVAILABLE:
             return
@@ -69,11 +73,26 @@ class ProximityDetector:
         if os.path.exists(self.model_path):
             try:
                 self.model = YOLO(self.model_path)
+                self.class_names = {
+                    int(k): str(v).lower() for k, v in getattr(self.model, "names", {}).items()
+                }
+                self.worker_class_ids = self._resolve_class_ids(("worker", "person", "human", "ouvrier"))
+                self.machine_class_ids = self._resolve_class_ids(
+                    ("machine", "vehicle", "engin", "excavator", "truck", "forklift", "bulldozer")
+                )
                 print(f"[ProximityDetector] ✅ Modèle chargé : {self.model_path}")
             except Exception as exc:
                 print(f"[ProximityDetector] ❌ Erreur chargement : {exc}")
         else:
             print(f"[ProximityDetector] ❌ Modèle introuvable : {self.model_path}")
+
+    def _resolve_class_ids(self, keywords):
+        ids = {
+            cls_id
+            for cls_id, name in self.class_names.items()
+            if any(keyword in name for keyword in keywords)
+        }
+        return ids
 
     # ──────────────────────────────────────────────────────────────────────────
     #  DÉTECTION
@@ -466,13 +485,14 @@ class ProximityDetector:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                 conf = float(box.conf[0].cpu().numpy())
                 cls  = int(box.cls[0].cpu().numpy())
+                class_name = self.class_names.get(cls, 'worker' if cls == 0 else 'machine')
                 detections.append({
                     'bbox'      : [float(x1), float(y1),
                                    float(x2), float(y2)],
                     'center'    : [float((x1+x2)/2), float((y1+y2)/2)],
                     'confidence': conf,
                     'class'     : cls,
-                    'class_name': 'worker' if cls == 0 else 'machine',
+                    'class_name': class_name,
                 })
         return detections
 
@@ -481,8 +501,16 @@ class ProximityDetector:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _analyze(self, detections: list, frame_shape):
-        workers  = [d for d in detections if d['class'] == 0]
-        machines = [d for d in detections if d['class'] == 1]
+        workers = [
+            d for d in detections
+            if d['class'] in self.worker_class_ids
+            or any(token in d.get('class_name', '') for token in ('worker', 'person', 'human', 'ouvrier'))
+        ]
+        machines = [
+            d for d in detections
+            if d['class'] in self.machine_class_ids
+            or any(token in d.get('class_name', '') for token in ('machine', 'vehicle', 'engin', 'excavator', 'truck', 'forklift'))
+        ]
 
         incident_logs = []
         max_conf      = 0.0

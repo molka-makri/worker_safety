@@ -31,6 +31,7 @@ from typing import Tuple, Dict, Any, Optional, List
 
 import cv2
 import numpy as np
+from app.hf_model_store import ensure_model_file
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'models'))
 
 FATIGUE_MODEL_PATH  = os.path.join(MODELS_DIR, 'fatigue_detection.pt')
+FATIGUE_MODEL_PATH  = ensure_model_file('fatigue_detection.pt')
 CASCADE_FACE_PATHS  = [
     cv2.data.haarcascades + 'haarcascade_frontalface_default.xml',
     cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml',

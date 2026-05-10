@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 import torchvision.models as models
 from PIL import Image
 import numpy as np
+from app.hf_model_store import ensure_model_file
 
 # Checkpoints saved with NumPy 2 may reference numpy._core while older NumPy
 # exposes the same internals under numpy.core.
@@ -63,7 +64,7 @@ class SignDetector:
     def load_models(self):
         """Loads all 6 models once at startup."""
         # ── STAGE 1: Load Router ──
-        router_path = os.path.join(MODELS_DIR, 'resnet50_router.pt')
+        router_path = ensure_model_file('resnet50_router.pt')
         if os.path.exists(router_path):
             try:
                 checkpoint = torch.load(router_path, map_location=self.device, weights_only=False)
@@ -81,7 +82,7 @@ class SignDetector:
 
         # ── STAGE 2: Load Defect Models ──
         for cat in ['E', 'F', 'P', 'M', 'W']:
-            path = os.path.join(MODELS_DIR, f'resnet50_{cat}.pt')
+            path = ensure_model_file(f'resnet50_{cat}.pt')
             if os.path.exists(path):
                 try:
                     checkpoint = torch.load(path, map_location=self.device, weights_only=False)

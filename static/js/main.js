@@ -29,23 +29,41 @@ setInterval(updateClock, 1000);
 updateClock();
 
 // ── CONSTANTES VIDÉO ──────────────────────────────────────
-const LIVE_VIDEO_SRC = "/media/worker_falling3.mp4";
-const LIVE_VIDEO_SRC_CAM2 = "/media/worker_tired.mp4";
-const LIVE_VIDEO_SRC_CAM3 = "/media/spill.mp4";
-const LIVE_VIDEO_SRC_CAM4 = "/media/ppe_video.mp4";
-const LIVE_VIDEO_SRC_CAM6 = "/media/exit_emergency.mp4";
-const LIVE_VIDEO_SRC_CAM5 = "/media/hole.mp4";
-const LIVE_VIDEO_SRC_CAM7 = "/media/construction_signs2.mp4";
-const LIVE_VIDEO_SRC_CAM8 = "/media/tracking_workers.mp4";
-const LIVE_VIDEO_SRC_CAM8_PROXIMITY = "/media/Media_Proximity/vid3.mp4";
-const LIVE_VIDEO_SRC_CAM9 = "/media/posture.mp4";
-const LIVE_VIDEO_SRC_CAM10 = "/media/panic.mp4";
-const LIVE_VIDEO_SRC_CAM12 = "/media/fire.mp4";
-const LIVE_VIDEO_SRC_CAM13 = "/media/debris_tracking.mp4";
-const DASHBOARD_PPE_SPILL_SRC = "/media/ppe_spill.mp4";
-const DASHBOARD_SPILL_FALL_SRC = "/media/spill_fall.mp4";
-const VIDEO_CAPTURE_MAX_WIDTH = 960;
-const VIDEO_CAPTURE_MAX_HEIGHT = 960;
+const HF_MEDIA_BASE = "/hf-media";
+const hfMediaUrl = (path) => `${HF_MEDIA_BASE}/${path}`;
+const LIVE_VIDEO_SRC = hfMediaUrl("worker_falling3.mp4");
+const LIVE_VIDEO_SRC_CAM2 = hfMediaUrl("worker_tired.mp4");
+const LIVE_VIDEO_SRC_CAM3 = hfMediaUrl("spill.mp4");
+const LIVE_VIDEO_SRC_CAM4 = hfMediaUrl("ppe_video.mp4");
+const LIVE_VIDEO_SRC_CAM6 = hfMediaUrl("exit_emergency.mp4");
+const LIVE_VIDEO_SRC_CAM5 = hfMediaUrl("hole.mp4");
+const LIVE_VIDEO_SRC_CAM7 = hfMediaUrl("construction_signs2.mp4");
+const LIVE_VIDEO_SRC_CAM8 = hfMediaUrl("tracking_workers.mp4");
+const LIVE_VIDEO_SRC_CAM8_PROXIMITY = hfMediaUrl("Media_Proximity/vid3.mp4");
+const LIVE_VIDEO_SRC_CAM9 = hfMediaUrl("posture.mp4");
+const LIVE_VIDEO_SRC_CAM10 = hfMediaUrl("panic.mp4");
+const LIVE_VIDEO_SRC_CAM12 = hfMediaUrl("fire.mp4");
+const LIVE_VIDEO_SRC_CAM13 = hfMediaUrl("debris_tracking.mp4");
+const DASHBOARD_PPE_SPILL_SRC = hfMediaUrl("ppe_spill.mp4");
+const DASHBOARD_SPILL_FALL_SRC = hfMediaUrl("spill_fall.mp4");
+const VIDEO_CAPTURE_MAX_WIDTH = 640;
+const VIDEO_CAPTURE_MAX_HEIGHT = 640;
+const VIDEO_CAPTURE_JPEG_QUALITY = 0.72;
+const DETECTION_PLAYBACK_RATE = 0.9;
+const LIVE_PRELOAD_TARGETS = [
+  "fall",
+  "fatigue",
+  "spill",
+  "ppe",
+  "manhole",
+  "exit",
+  "sign",
+  "tracking",
+  "proximity",
+  "posture",
+  "panic",
+  "fire",
+];
 
 // ── ÉTAT DES MODULES ──────────────────────────────────────
 let liveDetectionInterval = null;
@@ -143,6 +161,7 @@ let exitRequestInFlight = false;
 let exitLastAlertAt = 0;
 let cam6RunToken = 0;
 let camerasRunning = false;
+let liveModelPreloadPromise = null;
 
 const SPILL_ANALYSIS_INTERVAL_MS = 350;
 const SPILL_ALERT_COOLDOWN_MS = 10000;
@@ -178,11 +197,19 @@ function captureVideoFrame(
     video.dataset.captureWidth = width;
     video.dataset.captureHeight = height;
 
-    return canvas.toDataURL("image/jpeg", 0.92).split(",")[1];
+    return canvas
+      .toDataURL("image/jpeg", VIDEO_CAPTURE_JPEG_QUALITY)
+      .split(",")[1];
   } catch (err) {
     console.error("[SafeVision] captureVideoFrame:", err);
     return null;
   }
+}
+
+function prepareVideoElement(video) {
+  if (!video) return;
+  video.crossOrigin = "anonymous";
+  video.setAttribute("crossorigin", "anonymous");
 }
 
 function getCookie(name) {
@@ -2062,6 +2089,22 @@ function drawPostureOverlay(canvasId, details, video, isUnsafe) {
   setCanvasSize(canvas, video);
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const annotatedImage =
+    details.annotated_image ||
+    (details.annotated_frame
+      ? `data:image/jpeg;base64,${details.annotated_frame}`
+      : null);
+  if (annotatedImage) {
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    };
+    img.src = annotatedImage;
+    return;
+  }
+
   const rect = getContainedVideoRect(canvas, video);
 
   const safeColor = "rgba(74,227,181,0.95)";
@@ -3415,6 +3458,7 @@ function initializeCameras() {
   ].forEach(([id, src, statusFn]) => {
     const v = document.getElementById(id);
     if (v) {
+      prepareVideoElement(v);
       v.src = src + "?v=" + Date.now();
       v.load();
       v.pause();
@@ -3428,7 +3472,9 @@ function initializeCameras() {
 function _startCamWithLoop(id, src, startFn) {
   const v = document.getElementById(id);
   if (!v) return;
+  prepareVideoElement(v);
   v.dataset.shouldRun = "1";
+  v.playbackRate = DETECTION_PLAYBACK_RATE;
   v.src = src + "?v=" + Date.now();
   v.currentTime = 0;
   let detectionStarted = false;
@@ -3457,7 +3503,9 @@ function _startCamWithLoop(id, src, startFn) {
 function _startCamVideoOnly(id, src, statusFn) {
   const v = document.getElementById(id);
   if (!v) return;
+  prepareVideoElement(v);
   v.dataset.shouldRun = "1";
+  v.playbackRate = DETECTION_PLAYBACK_RATE;
   v.src = src + "?v=" + Date.now();
   v.currentTime = 0;
   const startPlayback = () => {
@@ -3479,13 +3527,71 @@ function _startCamVideoOnly(id, src, statusFn) {
   };
 }
 
-function startCameras() {
+function updateLivePreparationStatus(text) {
+  [
+    updateCam1Status,
+    updateCam2Status,
+    updateCam3Status,
+    updateCam4Status,
+    updateCam5Status,
+    updateCam6Status,
+    updateCam7Status,
+    updateCam8Status,
+    updateCam9Status,
+    updateCam10Status,
+    updateCam11Status,
+    updateCam12Status,
+  ].forEach((fn) => {
+    try {
+      fn(text);
+    } catch (err) {
+      console.debug("[SafeVision] status warmup:", err);
+    }
+  });
+}
+
+async function preloadLiveModels() {
+  if (liveModelPreloadPromise) return liveModelPreloadPromise;
+
+  liveModelPreloadPromise = fetch("/api/preload-models/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken"),
+    },
+    body: JSON.stringify({ targets: LIVE_PRELOAD_TARGETS }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      console.log("[SafeVision] preload models:", data);
+      return data;
+    })
+    .catch((err) => {
+      console.error("[SafeVision] preload models failed:", err);
+      liveModelPreloadPromise = null;
+      throw err;
+    });
+
+  return liveModelPreloadPromise;
+}
+
+async function startCameras() {
   console.log("[SafeVision] startCameras()");
   camerasRunning = true;
   initializeCameras();
 
+  updateLivePreparationStatus("Preparation des modeles...");
+  try {
+    await preloadLiveModels();
+  } catch (err) {
+    updateLivePreparationStatus("Preparation partielle");
+  }
+  if (!camerasRunning) return;
+
   const cam1 = document.getElementById("cam1-video");
   if (cam1) {
+    prepareVideoElement(cam1);
+    cam1.playbackRate = DETECTION_PLAYBACK_RATE;
     cam1.currentTime = 0;
     cam1.play().catch(() => {});
     startLiveDetection(cam1);
@@ -3493,6 +3599,8 @@ function startCameras() {
 
   const cam2 = document.getElementById("cam2-video");
   if (cam2) {
+    prepareVideoElement(cam2);
+    cam2.playbackRate = DETECTION_PLAYBACK_RATE;
     cam2.play().catch(() => {});
     startFatigueDetection(cam2);
   }
@@ -3641,6 +3749,36 @@ function initTheme() {
   applyTheme(saved || def);
 }
 
+const SIDEBAR_STATE_KEY = "safevision.sidebarCollapsed";
+
+function applySidebarState(collapsed) {
+  document.body.classList.toggle("sidebar-collapsed", collapsed);
+
+  const sidebarToggle = document.getElementById("sidebar-toggle");
+  const topbarToggle = document.getElementById("sidebar-toggle-top");
+  const ariaLabel = collapsed
+    ? "Ouvrir la barre latérale"
+    : "Replier la barre latérale";
+
+  [sidebarToggle, topbarToggle].forEach((button) => {
+    if (!button) return;
+    button.setAttribute("aria-expanded", String(!collapsed));
+    button.setAttribute("aria-label", ariaLabel);
+    button.setAttribute("title", ariaLabel);
+  });
+}
+
+function initSidebar() {
+  const collapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "1";
+  applySidebarState(collapsed);
+}
+
+function toggleSidebar() {
+  const collapsed = !document.body.classList.contains("sidebar-collapsed");
+  applySidebarState(collapsed);
+  localStorage.setItem(SIDEBAR_STATE_KEY, collapsed ? "1" : "0");
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // KPI
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3670,9 +3808,16 @@ const KPI = {
 
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  initSidebar();
   document
     .getElementById("theme-toggle")
     ?.addEventListener("click", toggleTheme);
+  document
+    .getElementById("sidebar-toggle")
+    ?.addEventListener("click", toggleSidebar);
+  document
+    .getElementById("sidebar-toggle-top")
+    ?.addEventListener("click", toggleSidebar);
 
   document
     .querySelectorAll(".stat-card, .module-card, .panel")
@@ -3688,6 +3833,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const cam1 = document.getElementById("cam1-video");
   if (cam1) {
+    preloadLiveModels().catch(() => {});
     cam1.addEventListener("loadeddata", () => {
       if (cam1.paused && !liveVideoAnalysisActive)
         updateCam1Status("Caméra prête");

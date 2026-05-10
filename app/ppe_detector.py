@@ -1,9 +1,10 @@
 import os
 import cv2
 from typing import Any, Dict, Tuple
+from app.hf_model_store import ensure_model_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PPE_MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, '..', 'models', 'ppe.pt'))
+PPE_MODEL_PATH = ensure_model_file('ppe.pt')
 
 CONF_THRESHOLD = 0.40
 

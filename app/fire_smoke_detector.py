@@ -2,11 +2,10 @@ import os
 from typing import Any, Dict, List, Tuple
 
 import cv2
+from app.hf_model_store import ensure_model_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FIRE_SMOKE_MODEL_PATH = os.path.abspath(
-    os.path.join(BASE_DIR, "..", "models", "fire_smoke_detection.pt")
-)
+FIRE_SMOKE_MODEL_PATH = ensure_model_file("fire_smoke_detection.pt")
 
 CONF_THRESHOLD = 0.25
 

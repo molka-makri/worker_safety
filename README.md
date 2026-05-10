@@ -1,180 +1,282 @@
-# Projet PI - Interface Django
+---
+title: Worker Safety Dashboard
+emoji: 🦺
+colorFrom: red
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+---
 
-Interface web moderne et responsive construite avec Django, HTML, CSS et JavaScript.
+# Nom du Projet
 
-## 🚀 Démarrage Rapide
+Worker Safety Dashboard
 
-### Prérequis
-- Python 3.8+
-- pip
+A real-time industrial safety monitoring platform built with Django, JavaScript, PyTorch, Torchvision, Ultralytics YOLO, OpenCV, NumPy, MediaPipe, Docker, and Hugging Face Spaces.
 
-### Installation
+## Overview
 
-1. **Cloner ou naviguer vers le dossier du projet**
-```bash
-cd projet_pi
+This project was developed as part of the coursework for **AI Project**  
+at **Private Higher School of Engineering and Technology - Esprit School of Engineering**.
+
+The application centralizes multiple AI safety modules in one dashboard and supports local execution as well as deployment on Hugging Face Spaces.
+
+## Features
+
+- Fall detection from surveillance video streams
+- Fatigue detection for workers
+- Spill segmentation and hazard alerting
+- Manhole open/closed detection
+- Emergency exit blockage detection
+- PPE compliance detection
+- Safety sign defect detection
+- Worker tracking and counting
+- Worker-machine proximity detection
+- Unsafe posture detection with skeleton overlay
+- Panic behavior detection
+- Fire and smoke detection
+- Live dashboard with alerts, reports, overlays, and camera management
+
+## Tech Stack
+
+### Frontend
+- HTML5
+- CSS3
+- JavaScript
+
+### Backend
+- Python
+- Django
+- OpenCV
+- NumPy
+- PyTorch
+- Torchvision
+- Ultralytics YOLO
+- MediaPipe
+
+### Other Tools
+- Docker
+- Hugging Face Spaces
+- Hugging Face Hub
+- SQLite
+- Gunicorn
+- WhiteNoise
+
+## Directory Structure
+
+```text
+worker_safety/
+├── app/
+│   ├── fall_detector.py
+│   ├── fatiguedetector.py
+│   ├── spill_detector.py
+│   ├── manhole_detector.py
+│   ├── exit_detector.py
+│   ├── proximity_detector.py
+│   ├── posture_detector.py
+│   ├── panic_detector.py
+│   ├── fire_smoke_detector.py
+│   ├── worker_tracking_detector.py
+│   ├── views.py
+│   ├── urls.py
+│   ├── models.py
+│   └── hf_model_store.py
+├── config/
+│   ├── settings.py
+│   ├── urls.py
+│   └── wsgi.py
+├── static/
+│   ├── css/
+│   └── js/
+├── templates/
+│   └── safety_vision/
+├── models/
+├── media/
+├── requirements.txt
+├── Dockerfile
+├── start.sh
+├── push_to_hf_space.py
+└── manage.py
 ```
 
-2. **Créer un environnement virtuel**
+## Getting Started
+
+### 1. Clone the project
+
+```bash
+git clone <your-repository-url>
+cd worker_safety
+```
+
+### 2. Create a virtual environment
+
 ```bash
 # Windows
 python -m venv venv
 venv\Scripts\activate
 
-# Mac/Linux
+# Linux / macOS
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-3. **Installer les dépendances**
+### 3. Install dependencies
+
 ```bash
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-4. **Appliquer les migrations**
+### 4. Configure environment variables
+
+Create a `.env` file or define environment variables manually.
+
+Example:
+
+```env
+SECRET_KEY=change-me
+DEBUG=1
+ALLOWED_HOSTS=127.0.0.1,localhost
+CSRF_TRUSTED_ORIGINS=http://127.0.0.1:8000,http://localhost:8000
+HF_MODEL_REPO_ID=molka8/worker_safety_models
+SERVE_MEDIA=1
+```
+
+### 5. Provide the models
+
+This project expects AI weights to be available either:
+
+- locally inside `models/`, or
+- remotely from Hugging Face through `HF_MODEL_REPO_ID`
+
+The current deployment logic auto-downloads missing weights from:
+
+```text
+molka8/worker_safety_models
+```
+
+Important expected files include:
+
+- `fall_detection.pt`
+- `fatigue_detection.pt`
+- `spill_detection_model.pt`
+- `manhole_seg.pt`
+- `exit_emergency.pth`
+- `proximity.pt`
+- `ppe.pt`
+- `resnet50_router.pt`
+- `resnet50_E.pt`
+- `resnet50_F.pt`
+- `resnet50_P.pt`
+- `resnet50_M.pt`
+- `resnet50_W.pt`
+- `posture.pt`
+- `yolov8n-pose.pt`
+- `panic.pt`
+- `peopleNet.pt`
+- `fire_smoke_detection.pt`
+
+### 6. Apply migrations
+
 ```bash
 python manage.py migrate
 ```
 
-5. **Créer un superutilisateur (optionnel)**
-```bash
-python manage.py createsuperuser
-```
+### 7. Run the project locally
 
-6. **Lancer le serveur de développement**
 ```bash
 python manage.py runserver
 ```
 
-7. **Accéder à l'application**
-- Interface: http://localhost:8000
-- Admin: http://localhost:8000/admin
+Open:
 
-## 📁 Structure du Projet
+- `http://127.0.0.1:8000/`
 
-```
-projet_pi/
-├── manage.py                 # Utilitaire de gestion Django
-├── requirements.txt          # Dépendances Python
-├── config/                   # Configuration Django
-│   ├── settings.py          # Paramètres principaux
-│   ├── urls.py              # URLs principales
-│   ├── wsgi.py              # Configuration WSGI
-│   └── __init__.py
-├── app/                      # Application principale
-│   ├── models.py            # Modèles de données
-│   ├── views.py             # Vues/Contrôleurs
-│   ├── urls.py              # URLs de l'app
-│   ├── admin.py             # Configuration admin
-│   ├── apps.py
-│   ├── migrations/          # Migrations BD
-│   └── __init__.py
-├── templates/               # Fichiers HTML
-│   ├── base.html            # Template principal
-│   └── index.html           # Page d'accueil
-├── static/                  # Fichiers statiques
-│   ├── css/
-│   │   └── style.css        # Styles CSS
-│   ├── js/
-│   │   └── main.js          # Script JavaScript
-│   ├── images/              # Images
-│   └── fonts/               # Polices
-└── media/                   # Fichiers utilisateur
-```
+### 8. Optional admin user
 
-## 🎨 Fonctionnalités
-
-- ✅ Interface responsive et moderne
-- ✅ Navigation fluide
-- ✅ Système de cartes et grilles
-- ✅ API test intégrée
-- ✅ JavaScript interactif
-- ✅ Animations smooth
-- ✅ Support mobile
-
-## 📝 Ajouter vos Modèles
-
-Modifiez le fichier `app/models.py`:
-
-```python
-from django.db import models
-
-class MonModele(models.Model):
-    nom = models.CharField(max_length=100)
-    description = models.TextField()
-    date_creation = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return self.nom
-```
-
-Puis:
 ```bash
-python manage.py makemigrations
-python manage.py migrate
+python manage.py createsuperuser
 ```
 
-## 📱 JavaScript Utiles
+## Local Setup Notes
 
-L'application inclut des fonctions JavaScript pratiques:
+### Media and demo videos
 
-```javascript
-// Requêtes API
-await apiGet('/api/endpoint');
-await apiPost('/api/endpoint', {data: 'valeur'});
-await apiPut('/api/endpoint', {data: 'nouvelle_valeur'});
-await apiDelete('/api/endpoint');
+The live dashboard can use:
 
-// Notifications
-showNotification('Message', 'success');
-showNotification('Erreur', 'error');
+- local files from `media/`, or
+- proxied remote files from the Hugging Face dataset repo
 
-// Validation JSON
-validateJSON(str); // true/false
+Current hosted demo media is expected from:
+
+```text
+molka8/worker_safety_media
 ```
 
-## 🔧 Configuration
+### If someone pulls the project later
 
-### Base de Données
-Le projet utilise SQLite par défaut. Pour utiliser PostgreSQL:
+To run the project successfully after `git pull`, they should:
 
-```python
-# config/settings.py
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'projet_pi',
-        'USER': 'username',
-        'PASSWORD': 'password',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
+1. install dependencies from `requirements.txt`
+2. set the `.env` variables
+3. make sure the Hugging Face model repo is accessible, or copy the model files into `models/`
+4. run `python manage.py migrate`
+5. start the server with `python manage.py runserver`
+
+If Hugging Face weights are missing or corrupted, the affected module may fall back to a lighter heuristic mode when available.
+
+## Hugging Face Deployment
+
+### Space
+
+This project is prepared for a **Docker Space**.
+
+Main files:
+
+- `Dockerfile`
+- `start.sh`
+- `push_to_hf_space.py`
+
+### Deploy steps
+
+```bash
+hf auth login
 ```
 
-### Variables d'Environnement
-Créez un fichier `.env`:
-
-```
-SECRET_KEY=your-secret-key
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
+```bash
+# PowerShell
+$env:HF_SPACE_ID="your-username/worker-safety-dashboard"
+python push_to_hf_space.py
 ```
 
-## 📚 Ressources
+Recommended Space variables/secrets:
 
-- [Django Documentation](https://docs.djangoproject.com/)
-- [MDN Web Docs](https://developer.mozilla.org/)
-- [Font Awesome Icons](https://fontawesome.com/)
+- `SECRET_KEY`
+- `DEBUG=0`
+- `ALLOWED_HOSTS=*`
+- `CSRF_TRUSTED_ORIGINS=https://*.hf.space,https://huggingface.co`
+- `SERVE_MEDIA=1`
+- `HF_MODEL_REPO_ID=molka8/worker_safety_models`
 
-## 🤝 Contribution
+## Detector Notes
 
-N'hésitez pas à améliorer et ajouter des fonctionnalités!
+### Posture
 
-## 📄 Licence
+- Uses `posture.pt` for safe/unsafe classification
+- Uses `yolov8n-pose.pt` first for pose extraction
+- Falls back to MediaPipe when YOLO pose is unavailable
 
-Ce projet est sous licence libre.
+### Panic
 
----
+- Uses `panic.pt` as the primary BiLSTM classifier
+- Uses pose extraction from YOLO pose first
+- Falls back to MediaPipe-based heuristic behavior scoring if the main classifier or pose backend is unavailable
 
-**Prêt à commencer? Lancez le serveur et explorez l'interface!** 🎉
+### Proximity
+
+- Uses `proximity.pt`
+- Now resolves worker and machine classes from model labels, not only from hard-coded class IDs
+
+## Acknowledgments
+
+This project was completed under the guidance of the teaching staff of **Esprit School of Engineering** as part of the **AI Project** module at **Private Higher School of Engineering and Technology - Esprit School of Engineering**.

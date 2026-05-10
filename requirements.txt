@@ -5,10 +5,14 @@ python-decouple==3.8
 requests
 pandas
 openpyxl
-opencv-python
-numpy
+opencv-python==4.10.0.84
+numpy==1.26.4
 ultralytics
 torch
 torchvision
+mediapipe==0.10.14
 lap>=0.5.12
 deep-sort-realtime
+gunicorn
+whitenoise
+huggingface_hub

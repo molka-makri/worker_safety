@@ -13,6 +13,7 @@ from .views import (
     api_test,
     api_module_events,
     api_clear_alerts,
+    api_preload_models,
     api_fall_detection,
     api_fall_detection_batch,
     api_fatigue_detection,
@@ -30,6 +31,7 @@ from .views import (
     api_panic_detection,     # CAM 10 — panic
     api_worker_tracking_detection,
     api_chat,
+    hf_media_proxy,
 
 )
 
@@ -54,6 +56,7 @@ urlpatterns = [
     path('api/test/',           api_test,                       name='api_test'),
     path('api/module-events/<slug:slug>/', api_module_events,   name='api_module_events'),
     path('api/alerts/clear/',   api_clear_alerts,               name='api_clear_alerts'),
+    path('api/preload-models/', api_preload_models,             name='api_preload_models'),
 
     # ── API — Détection de chute ───────────────────────────
     path('api/fall-detection/',        api_fall_detection,        name='api_fall_detection'),
@@ -82,5 +85,6 @@ urlpatterns = [
     
     # ── API — Tracking travailleurs (CAM 8) ───────────────
     path('api/worker-tracking-detection/', api_worker_tracking_detection, name='api_worker_tracking_detection'),
-     path('api/chat/', api_chat, name='api_chat'),
+    path('api/chat/', api_chat, name='api_chat'),
+    path('hf-media/<path:asset_path>/', hf_media_proxy, name='hf_media_proxy'),
 ]

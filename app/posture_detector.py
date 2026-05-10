@@ -11,10 +11,11 @@ import cv2
 import numpy as np
 import os
 from pathlib import Path
+from app.hf_model_store import ensure_model_file
 
 BASE_DIR           = Path(os.path.dirname(__file__)).parent
-POSTURE_MODEL_PATH = BASE_DIR / 'models' / 'posture.pt'
-POSE_MODEL_PATH    = BASE_DIR / 'models' / 'yolov8n-pose.pt'
+POSTURE_MODEL_PATH = Path(ensure_model_file('posture.pt'))
+POSE_MODEL_PATH    = Path(ensure_model_file('yolov8n-pose.pt'))
 
 _posture_model = None
 _pose_model    = None
@@ -58,14 +59,16 @@ def _load_models():
         try:
             from ultralytics import YOLO
             _posture_model = YOLO(str(POSTURE_MODEL_PATH))
-        except Exception:
-            pass
+            print(f"[PostureDetector] OK: posture model loaded: {POSTURE_MODEL_PATH}")
+        except Exception as exc:
+            print(f"[PostureDetector] WARNING: posture model unavailable: {exc}")
     if _pose_model is None and POSE_MODEL_PATH.exists():
         try:
             from ultralytics import YOLO
             _pose_model = YOLO(str(POSE_MODEL_PATH))
-        except Exception:
-            pass
+            print(f"[PostureDetector] OK: pose model loaded: {POSE_MODEL_PATH}")
+        except Exception as exc:
+            print(f"[PostureDetector] WARNING: pose model unavailable: {exc}")
 
 
 def _load_mediapipe():
@@ -82,6 +85,7 @@ def _load_mediapipe():
         )
     except Exception:
         _mp_pose = None
+        print("[PostureDetector] WARNING: MediaPipe unavailable")
     return _mp_pose
 
 
@@ -354,6 +358,7 @@ def detect_posture_in_frame(frame, camera='cam9'):
         details['processing_method'] = 'no_person_detected'
         _, b64 = _annotate_frame(frame, [])
         details['annotated_frame'] = b64
+        details['annotated_image'] = f'data:image/jpeg;base64,{b64}' if b64 else ''
         return False, 0.0, details
 
     # ── Step 2 & 3: classify each person with posture.pt ──────────────────────
@@ -413,6 +418,7 @@ def detect_posture_in_frame(frame, camera='cam9'):
         # ── Step 4: annotate frame (BBX + #ID + skeleton per person) ──────────
         _, b64 = _annotate_frame(frame, persons)
         details['annotated_frame'] = b64
+        details['annotated_image'] = f'data:image/jpeg;base64,{b64}' if b64 else ''
 
         details['detections'] = [
             {k: v for k, v in p.items() if k not in ('kps_xy', 'kps_conf')}

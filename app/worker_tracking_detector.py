@@ -3,9 +3,10 @@ import os
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
+from app.hf_model_store import ensure_model_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PEOPLE_MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "models", "peopleNet.pt"))
+PEOPLE_MODEL_PATH = ensure_model_file("peopleNet.pt")
 
 CONF_THRESHOLD = 0.2
 IOU_THRESHOLD = 0.45
