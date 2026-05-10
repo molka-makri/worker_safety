@@ -234,21 +234,12 @@ $env:HF_SPACE_ID="your-username/worker-safety-dashboard"
 python push_to_hf_space.py
 ```
 
-### Recommended Space secrets
-
-| Variable | Value |
-|---|---|
-| `SECRET_KEY` | *(your secret key)* |
-| `DEBUG` | `0` |
-| `ALLOWED_HOSTS` | `*` |
-| `CSRF_TRUSTED_ORIGINS` | `https://*.hf.space,https://huggingface.co` |
-| `SERVE_MEDIA` | `1` |
-| `HF_MODEL_REPO_ID` | `molka8/worker_safety_models` |
 
 ---
 
 ## 🙏 Acknowledgments
 
 This project was completed under the guidance of the teaching staff of **Esprit School of Engineering** as part of the **AI Project** module at **Esprit School of Engineering**.
+---
 We would like to thank our professors for their guidance, support, and valuable feedback throughout the sessions that made this project possible.
 Special thanks to the open-source communities behind PyTorch, Ultralytics YOLO, OpenCV, MediaPipe, and Hugging Face for making this work possible.
