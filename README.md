@@ -1,68 +1,68 @@
+# 🦺 Worker Safety Dashboard
+
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-4.x-092E20?style=flat&logo=django&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white)
+![YOLO](https://img.shields.io/badge/Ultralytics-YOLO-00FFFF?style=flat)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![HuggingFace](https://img.shields.io/badge/HuggingFace-Spaces-FFD21E?style=flat&logo=huggingface&logoColor=black)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+
+A real-time **industrial worker safety monitoring platform** built with Django, PyTorch, Ultralytics YOLO, OpenCV, MediaPipe, and Docker. Centralizes multiple AI-powered safety modules in a single live dashboard, with support for both local execution and cloud deployment on Hugging Face Spaces.
+
+> 🎓 Developed as part of the **AI Project** module at **Esprit School of Engineering** — *Private Higher School of Engineering and Technology*.
+
+🔗 **Live Demo**: [View on Hugging Face Spaces](https://huggingface.co/spaces/molka8/worker-safety-dashboard) *(replace with your actual link)*
+
 ---
-title: Worker Safety Dashboard
-emoji: 🦺
-colorFrom: red
-colorTo: yellow
-sdk: docker
-app_port: 7860
-pinned: false
+
+## 📌 Overview
+
+This project was developed as part of the coursework for **AI Project**
+at **Private Higher School of Engineering and Technology — Esprit School of Engineering**.
+
+The platform aggregates over **13 AI safety detection modules** into a unified dashboard, enabling real-time monitoring of worker safety on industrial sites. It supports local execution as well as seamless deployment on Hugging Face Spaces via Docker.
+
+**Keywords**: worker safety, AI surveillance, fall detection, PPE compliance, fire detection, industrial monitoring, deep learning, computer vision, YOLO, Django, Esprit School of Engineering
+
 ---
 
-# Nom du Projet
+## ✨ Features
 
-Worker Safety Dashboard
+| Module | Description |
+|---|---|
+| 🤸 Fall Detection | Detects worker falls from surveillance video streams |
+| 😴 Fatigue Detection | Monitors signs of worker fatigue in real time |
+| 💧 Spill Segmentation | Identifies liquid spills and triggers hazard alerts |
+| 🕳️ Manhole Detection | Detects open/closed manhole covers |
+| 🚪 Emergency Exit Monitoring | Flags blocked emergency exit paths |
+| 🦺 PPE Compliance | Verifies proper use of personal protective equipment |
+| ⚠️ Safety Sign Inspection | Detects defects or absence of safety signage |
+| 👷 Worker Tracking | Tracks and counts workers across camera zones |
+| ⚙️ Proximity Detection | Alerts when workers are too close to machinery |
+| 🧍 Posture Analysis | Detects unsafe postures with skeleton overlay |
+| 😱 Panic Behavior | Identifies panic or distress behavior patterns |
+| 🔥 Fire & Smoke Detection | Real-time fire and smoke detection |
+| 📊 Live Dashboard | Centralized alerts, reports, overlays, and camera management |
 
-A real-time industrial safety monitoring platform built with Django, JavaScript, PyTorch, Torchvision, Ultralytics YOLO, OpenCV, NumPy, MediaPipe, Docker, and Hugging Face Spaces.
+---
 
-## Overview
-
-This project was developed as part of the coursework for **AI Project**  
-at **Private Higher School of Engineering and Technology - Esprit School of Engineering**.
-
-The application centralizes multiple AI safety modules in one dashboard and supports local execution as well as deployment on Hugging Face Spaces.
-
-## Features
-
-- Fall detection from surveillance video streams
-- Fatigue detection for workers
-- Spill segmentation and hazard alerting
-- Manhole open/closed detection
-- Emergency exit blockage detection
-- PPE compliance detection
-- Safety sign defect detection
-- Worker tracking and counting
-- Worker-machine proximity detection
-- Unsafe posture detection with skeleton overlay
-- Panic behavior detection
-- Fire and smoke detection
-- Live dashboard with alerts, reports, overlays, and camera management
-
-## Tech Stack
+## 🛠️ Tech Stack
 
 ### Frontend
-- HTML5
-- CSS3
-- JavaScript
+- HTML5, CSS3, JavaScript
 
 ### Backend
-- Python
-- Django
-- OpenCV
-- NumPy
-- PyTorch
-- Torchvision
-- Ultralytics YOLO
-- MediaPipe
+- Python · Django · OpenCV · NumPy
+- PyTorch · Torchvision · Ultralytics YOLO · MediaPipe
 
-### Other Tools
-- Docker
-- Hugging Face Spaces
-- Hugging Face Hub
-- SQLite
-- Gunicorn
-- WhiteNoise
+### Infrastructure & Tools
+- Docker · Hugging Face Spaces · Hugging Face Hub
+- SQLite · Gunicorn · WhiteNoise
 
-## Directory Structure
+---
+
+## 📁 Directory Structure
 
 ```text
 worker_safety/
@@ -99,7 +99,9 @@ worker_safety/
 └── manage.py
 ```
 
-## Getting Started
+---
+
+## 🚀 Getting Started
 
 ### 1. Clone the project
 
@@ -129,9 +131,7 @@ pip install -r requirements.txt
 
 ### 4. Configure environment variables
 
-Create a `.env` file or define environment variables manually.
-
-Example:
+Create a `.env` file at the root of the project:
 
 ```env
 SECRET_KEY=change-me
@@ -142,39 +142,30 @@ HF_MODEL_REPO_ID=molka8/worker_safety_models
 SERVE_MEDIA=1
 ```
 
-### 5. Provide the models
+### 5. AI Model Weights
 
-This project expects AI weights to be available either:
+The project expects model weights available either:
+- **locally** inside `models/`, or
+- **remotely** via Hugging Face Hub (`HF_MODEL_REPO_ID`)
 
-- locally inside `models/`, or
-- remotely from Hugging Face through `HF_MODEL_REPO_ID`
+Missing weights are auto-downloaded from `molka8/worker_safety_models`.
 
-The current deployment logic auto-downloads missing weights from:
+<details>
+<summary>📦 Expected model files</summary>
 
-```text
-molka8/worker_safety_models
+```
+fall_detection.pt        fatigue_detection.pt
+spill_detection_model.pt manhole_seg.pt
+exit_emergency.pth       proximity.pt
+ppe.pt                   resnet50_router.pt
+resnet50_E.pt            resnet50_F.pt
+resnet50_P.pt            resnet50_M.pt
+resnet50_W.pt            posture.pt
+yolov8n-pose.pt          panic.pt
+peopleNet.pt             fire_smoke_detection.pt
 ```
 
-Important expected files include:
-
-- `fall_detection.pt`
-- `fatigue_detection.pt`
-- `spill_detection_model.pt`
-- `manhole_seg.pt`
-- `exit_emergency.pth`
-- `proximity.pt`
-- `ppe.pt`
-- `resnet50_router.pt`
-- `resnet50_E.pt`
-- `resnet50_F.pt`
-- `resnet50_P.pt`
-- `resnet50_M.pt`
-- `resnet50_W.pt`
-- `posture.pt`
-- `yolov8n-pose.pt`
-- `panic.pt`
-- `peopleNet.pt`
-- `fire_smoke_detection.pt`
+</details>
 
 ### 6. Apply migrations
 
@@ -182,60 +173,54 @@ Important expected files include:
 python manage.py migrate
 ```
 
-### 7. Run the project locally
+### 7. Run locally
 
 ```bash
 python manage.py runserver
 ```
 
-Open:
+Open: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 
-- `http://127.0.0.1:8000/`
-
-### 8. Optional admin user
+### 8. (Optional) Create admin user
 
 ```bash
 python manage.py createsuperuser
 ```
 
-## Local Setup Notes
+---
 
-### Media and demo videos
+## 📝 Local Setup Notes
 
-The live dashboard can use:
+### Media & demo videos
 
-- local files from `media/`, or
-- proxied remote files from the Hugging Face dataset repo
+The dashboard can serve media from:
+- local files in `media/`, or
+- proxied files from the Hugging Face dataset repo `molka8/worker_safety_media`
 
-Current hosted demo media is expected from:
+### After `git pull`
 
-```text
-molka8/worker_safety_media
+```bash
+pip install -r requirements.txt   # 1. Install dependencies
+# Set .env variables               # 2. Configure environment
+python manage.py migrate           # 3. Apply migrations
+python manage.py runserver         # 4. Start the server
 ```
 
-### If someone pulls the project later
+> If Hugging Face weights are missing or corrupted, affected modules may fall back to a lighter heuristic mode when available.
 
-To run the project successfully after `git pull`, they should:
+---
 
-1. install dependencies from `requirements.txt`
-2. set the `.env` variables
-3. make sure the Hugging Face model repo is accessible, or copy the model files into `models/`
-4. run `python manage.py migrate`
-5. start the server with `python manage.py runserver`
+## ☁️ Hugging Face Deployment
 
-If Hugging Face weights are missing or corrupted, the affected module may fall back to a lighter heuristic mode when available.
+This project is packaged as a **Docker Space** on Hugging Face.
 
-## Hugging Face Deployment
+### Key files
 
-### Space
-
-This project is prepared for a **Docker Space**.
-
-Main files:
-
-- `Dockerfile`
-- `start.sh`
-- `push_to_hf_space.py`
+| File | Role |
+|---|---|
+| `Dockerfile` | Container definition |
+| `start.sh` | Startup script |
+| `push_to_hf_space.py` | Deployment automation |
 
 ### Deploy steps
 
@@ -249,34 +234,21 @@ $env:HF_SPACE_ID="your-username/worker-safety-dashboard"
 python push_to_hf_space.py
 ```
 
-Recommended Space variables/secrets:
+### Recommended Space secrets
 
-- `SECRET_KEY`
-- `DEBUG=0`
-- `ALLOWED_HOSTS=*`
-- `CSRF_TRUSTED_ORIGINS=https://*.hf.space,https://huggingface.co`
-- `SERVE_MEDIA=1`
-- `HF_MODEL_REPO_ID=molka8/worker_safety_models`
+| Variable | Value |
+|---|---|
+| `SECRET_KEY` | *(your secret key)* |
+| `DEBUG` | `0` |
+| `ALLOWED_HOSTS` | `*` |
+| `CSRF_TRUSTED_ORIGINS` | `https://*.hf.space,https://huggingface.co` |
+| `SERVE_MEDIA` | `1` |
+| `HF_MODEL_REPO_ID` | `molka8/worker_safety_models` |
 
-## Detector Notes
+---
 
-### Posture
+## 🙏 Acknowledgments
 
-- Uses `posture.pt` for safe/unsafe classification
-- Uses `yolov8n-pose.pt` first for pose extraction
-- Falls back to MediaPipe when YOLO pose is unavailable
+This project was completed under the guidance of the teaching staff of **Esprit School of Engineering** as part of the **AI Project** module at **Private Higher School of Engineering and Technology — Esprit School of Engineering**.
 
-### Panic
-
-- Uses `panic.pt` as the primary BiLSTM classifier
-- Uses pose extraction from YOLO pose first
-- Falls back to MediaPipe-based heuristic behavior scoring if the main classifier or pose backend is unavailable
-
-### Proximity
-
-- Uses `proximity.pt`
-- Now resolves worker and machine classes from model labels, not only from hard-coded class IDs
-
-## Acknowledgments
-
-This project was completed under the guidance of the teaching staff of **Esprit School of Engineering** as part of the **AI Project** module at **Private Higher School of Engineering and Technology - Esprit School of Engineering**.
+Special thanks to the open-source communities behind PyTorch, Ultralytics YOLO, OpenCV, MediaPipe, and Hugging Face for making this work possible.
