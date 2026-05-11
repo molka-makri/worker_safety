@@ -120,13 +120,16 @@ html, body {
   gap: 10px;
   padding: 20px 18px;
   border-bottom: 1px solid var(--bg-border);
+  text-decoration: none;
+  color: var(--text-primary);
 }
 
 .logo-text {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   color: var(--text-primary);
+  line-height: 1.05;
 }
 .logo-text .accent { color: var(--accent-red); }
 
@@ -309,6 +312,7 @@ html, body {
   font-weight: 600;
   outline: none;
   cursor: pointer;
+  max-width: 240px;
 }
 
 .btn-upload {

@@ -1,5 +1,5 @@
 {% extends "safety_vision/base.html" %}
-{% block title %}Paramètres — SafeVision AI{% endblock %}
+{% block title %}Parametres - AVERT GUARD{% endblock %}
 {% block page_title %}Paramètres{% endblock %}
 {% block page_subtitle %}Configuration de l'application et des modèles{% endblock %}
 {% block content %}
@@ -31,22 +31,22 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Source Caméra 1</label>
-          <input type="text" class="form-input" placeholder="rtsp://192.168.1.100/stream1" value="">
+          <input type="text" class="form-input" data-setting-key="cameras.cam1" placeholder="rtsp://192.168.1.100/stream1" value="/media/ppe_spill.mp4">
         </div>
         <div class="form-group">
           <label class="form-label">Source Caméra 2</label>
-          <input type="text" class="form-input" placeholder="rtsp://192.168.1.101/stream1" value="">
+          <input type="text" class="form-input" data-setting-key="cameras.cam2" placeholder="rtsp://192.168.1.101/stream1" value="/media/spill_fall.mp4">
         </div>
         <div class="form-group">
           <label class="form-label">Source Caméra 3</label>
-          <input type="text" class="form-input" placeholder="rtsp://..." value="">
+          <input type="text" class="form-input" data-setting-key="cameras.cam3" placeholder="rtsp://..." value="/media/posture.mp4">
         </div>
         <div class="form-group">
           <label class="form-label">Résolution de traitement</label>
-          <select class="form-input">
-            <option>640×480</option>
-            <option selected>1280×720</option>
-            <option>1920×1080</option>
+          <select class="form-input" data-setting-key="video.resolution">
+            <option value="640x480">640x480</option>
+            <option value="1280x720" selected>1280x720</option>
+            <option value="1920x1080">1920x1080</option>
           </select>
         </div>
       </div>
@@ -68,13 +68,13 @@
           <div class="form-group" style="margin:0">
             <label class="form-label">Fichier poids (.pt / .onnx)</label>
             <div style="display:flex; gap:8px">
-              <input type="text" class="form-input" placeholder="models/{{ mod.id }}/weights_best.pt">
-              <button class="btn-control" style="white-space:nowrap; padding:6px 10px; font-size:11px">Parcourir</button>
+              <input type="text" class="form-input" data-setting-key="models.{{ mod.id }}.weights" placeholder="models/{{ mod.id }}/weights_best.pt">
+              <button class="btn-control" type="button" style="white-space:nowrap; padding:6px 10px; font-size:11px" onclick="showPopupNotification('Choisissez le chemin du modele puis sauvegardez.', 'info', false)">Parcourir</button>
             </div>
           </div>
           <div class="form-group" style="margin:0">
             <label class="form-label">Seuil de confiance</label>
-            <input type="number" class="form-input" min="0" max="1" step="0.05" value="0.5" placeholder="0.5">
+            <input type="number" class="form-input" data-setting-key="models.{{ mod.id }}.threshold" min="0" max="1" step="0.05" value="0.5" placeholder="0.5">
           </div>
         </div>
         <div class="model-zone" style="padding:10px; margin-top:10px; font-size:9px; border-radius:6px">
@@ -95,7 +95,7 @@
           <div class="toggle-desc">Bip audio lors des alertes critiques</div>
         </div>
         <label class="toggle-switch">
-          <input type="checkbox" checked>
+          <input type="checkbox" data-setting-key="alerts.sound" checked>
           <span class="toggle-track"></span>
         </label>
       </div>
@@ -106,7 +106,7 @@
           <div class="toggle-desc">Sauvegarder l'image lors d'une détection critique</div>
         </div>
         <label class="toggle-switch">
-          <input type="checkbox" checked>
+          <input type="checkbox" data-setting-key="alerts.autoCapture" checked>
           <span class="toggle-track"></span>
         </label>
       </div>
@@ -117,19 +117,47 @@
           <div class="toggle-desc">Envoyer un email pour les alertes critiques</div>
         </div>
         <label class="toggle-switch">
-          <input type="checkbox">
+          <input type="checkbox" data-setting-key="alerts.email">
           <span class="toggle-track"></span>
         </label>
       </div>
 
       <div class="form-group" style="margin-top:16px">
         <label class="form-label">Dossier de sauvegarde des captures</label>
-        <input type="text" class="form-input" placeholder="./media/captures/" value="./media/captures/">
+        <input type="text" class="form-input" data-setting-key="storage.capturePath" placeholder="./media/captures/" value="./media/detection_captures/">
+      </div>
+    </div>
+
+    <hr style="border-color:var(--bg-border); margin:24px 0">
+
+    <div id="general">
+      <h2 class="settings-section-title">Configuration Generale</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nom application</label>
+          <input type="text" class="form-input" data-setting-key="app.name" value="AVERT GUARD">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mode par defaut</label>
+          <select class="form-input" data-setting-key="app.theme">
+            <option value="dark" selected>Sombre</option>
+            <option value="light">Clair</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Frequence dashboard</label>
+          <select class="form-input" data-setting-key="dashboard.refresh">
+            <option value="3000">3 secondes</option>
+            <option value="5000" selected>5 secondes</option>
+            <option value="10000">10 secondes</option>
+          </select>
+        </div>
       </div>
     </div>
 
     <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--bg-border)">
-      <button class="btn-save">Sauvegarder les paramètres</button>
+      <button class="btn-save" id="settings-save-btn" type="button">Sauvegarder les parametres</button>
+      <button class="btn-control" id="settings-reset-btn" type="button" style="margin-left:10px">Restaurer</button>
     </div>
 
   </div>

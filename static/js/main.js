@@ -1,16 +1,14 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SAFEVISION AI — main.js  (v6 — multi-camera, Worker Tracking + Posture + Panic)
-// CAM 1 : Détection de chute   (worker_falling3.mp4)
-// CAM 2 : Détection de fatigue (worker_tired.mp4)
-// CAM 3 : Spill detection      (spill.mp4)
-// CAM 4 : PPE detection        (ppe_video.mp4)
-// CAM 5 : Manhole detection    (hole.mp4)
-// CAM 6 : Exit emergency       (exit_emergency.mp4)
-// CAM 7 : Sign defect detection(construction_signs2.mp4)
-// CAM 8 : Worker tracking      (tracking_workers.mp4)
-// CAM 9 : Posture detection    (posture.mp4)
-// CAM 10: Panic detection      (panic.mp4)
-// CAM 13: Debris tracking      (debris_tracking.mp4, video only)
+// SAFEVISION AI — main.js  (v7 — live flux optimise)
+// LIVE CAM 2 : Fatigue             (worker_tired.mp4)
+// LIVE CAM 3 : Fall + Spill        (spill_fall.mp4)
+// LIVE CAM 4 : PPE + Spill + Posture (ppe_spill.mp4)
+// LIVE CAM 6 : Exit emergency      (emergency.mp4)
+// LIVE CAM 7 : Signs + Proximity   (signs_machine.mp4)
+// LIVE CAM 8 : Worker tracking     (tracking_workers.mp4)
+// LIVE CAM 9 : Posture             (posture.mp4)
+// LIVE CAM 10: Panic               (panic.mp4)
+// LIVE CAM 12: Fire + Proximity    (fire_machine.mp4)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 // ── HORLOGE LIVE ─────────────────────────────────────────
@@ -31,16 +29,16 @@ updateClock();
 // ── CONSTANTES VIDÉO ──────────────────────────────────────
 const LIVE_VIDEO_SRC = "/media/worker_falling3.mp4";
 const LIVE_VIDEO_SRC_CAM2 = "/media/worker_tired.mp4";
-const LIVE_VIDEO_SRC_CAM3 = "/media/spill.mp4";
-const LIVE_VIDEO_SRC_CAM4 = "/media/ppe_video.mp4";
-const LIVE_VIDEO_SRC_CAM6 = "/media/exit_emergency.mp4";
+const LIVE_VIDEO_SRC_CAM3 = "/media/spill_fall.mp4";
+const LIVE_VIDEO_SRC_CAM4 = "/media/ppe_spill.mp4";
+const LIVE_VIDEO_SRC_CAM6 = "/media/emergency.mp4";
 const LIVE_VIDEO_SRC_CAM5 = "/media/hole.mp4";
-const LIVE_VIDEO_SRC_CAM7 = "/media/construction_signs2.mp4";
+const LIVE_VIDEO_SRC_CAM7 = "/media/signs_machine.mp4";
 const LIVE_VIDEO_SRC_CAM8 = "/media/tracking_workers.mp4";
 const LIVE_VIDEO_SRC_CAM8_PROXIMITY = "/media/Media_Proximity/vid3.mp4";
 const LIVE_VIDEO_SRC_CAM9 = "/media/posture.mp4";
 const LIVE_VIDEO_SRC_CAM10 = "/media/panic.mp4";
-const LIVE_VIDEO_SRC_CAM12 = "/media/fire.mp4";
+const LIVE_VIDEO_SRC_CAM12 = "/media/fire_machine.mp4";
 const LIVE_VIDEO_SRC_CAM13 = "/media/debris_tracking.mp4";
 const DASHBOARD_PPE_SPILL_SRC = "/media/ppe_spill.mp4";
 const DASHBOARD_SPILL_FALL_SRC = "/media/spill_fall.mp4";
@@ -68,7 +66,20 @@ let cam6VideoAnalysisActive = false;
 
 let cam7DetectionInterval = null; // ADDED SIGN
 let cam7VideoAnalysisActive = false; // ADDED SIGN
+let cam3HybridInterval = null;
+let cam3HybridActive = false;
+let cam3HybridRequestInFlight = false;
+let cam4HybridInterval = null;
+let cam4HybridActive = false;
+let cam4HybridRequestInFlight = false;
+let cam7HybridInterval = null;
+let cam7HybridActive = false;
+let cam7HybridRequestInFlight = false;
+let cam12HybridInterval = null;
+let cam12HybridActive = false;
+let cam12HybridRequestInFlight = false;
 let cam8FrameLoopToken = 0;
+let cam8DetectionInterval = null;
 let cam8RafHandle = null;
 let cam8VideoFrameCallbackHandle = null;
 let cam8LoopVideoRef = null;
@@ -78,6 +89,7 @@ let spillRequestInFlight = {};
 let spillLastAlertAt = {};
 let cam9DetectionInterval = null; // POSTURE
 let cam9VideoAnalysisActive = false; // POSTURE
+let cam9HybridRequestInFlight = false;
 let cam10DetectionInterval = null; // PANIC
 let cam10VideoAnalysisActive = false; // PANIC
 let cam12DetectionInterval = null; // FIRE/SMOKE
@@ -106,11 +118,14 @@ let signLastAlertAt = 0;
 const SIGN_ANALYSIS_INTERVAL_MS = 800; // ResNet can be a bit heavier
 const SIGN_ALERT_COOLDOWN_MS = 10000;
 const WORKER_TRACKING_ALERT_COOLDOWN_MS = 9000;
+const WORKER_TRACKING_INTERVAL_MS = 700;
+const LIVE_HYBRID_INTERVAL_MS = 1800;
+const LIVE_HEAVY_HYBRID_INTERVAL_MS = 2200;
 
 // Proximity State Variables
 let proximityRequestInFlight = false;
 let proximityLastAlertAt = 0;
-const PROXIMITY_ANALYSIS_INTERVAL_MS = 1000;
+const PROXIMITY_ANALYSIS_INTERVAL_MS = 1500;
 const PROXIMITY_ALERT_COOLDOWN_MS = 10000;
 let cam8ProximityDetectionInterval = null;
 let cam8ProximityVideoAnalysisActive = false;
@@ -118,13 +133,13 @@ let cam8ProximityVideoAnalysisActive = false;
 // Posture State Variables (CAM 9)
 let postureRequestInFlight = false;
 let postureLastAlertAt = 0;
-const POSTURE_ANALYSIS_INTERVAL_MS = 800;
+const POSTURE_ANALYSIS_INTERVAL_MS = 1200;
 const POSTURE_ALERT_COOLDOWN_MS = 8000;
 
 // Panic State Variables (CAM 10)
 let panicRequestInFlight = false;
 let panicLastAlertAt = 0;
-const PANIC_ANALYSIS_INTERVAL_MS = 800;
+const PANIC_ANALYSIS_INTERVAL_MS = 1000;
 const PANIC_ALERT_COOLDOWN_MS = 6000;
 
 // Fire/Smoke State Variables (CAM 12)
@@ -148,11 +163,38 @@ const SPILL_ANALYSIS_INTERVAL_MS = 350;
 const SPILL_ALERT_COOLDOWN_MS = 10000;
 const MANHOLE_ANALYSIS_INTERVAL_MS = 450;
 const MANHOLE_ALERT_COOLDOWN_MS = 12000;
-const EXIT_ANALYSIS_INTERVAL_MS = 450;
+const EXIT_ANALYSIS_INTERVAL_MS = 1000;
 const EXIT_ALERT_COOLDOWN_MS = 10000;
 
 let camerasInitialized = false;
 let alertCount = 0;
+let liveAlertStats = { critical: 0, warnings: 0 };
+const AVERT_GUARD_SETTINGS_KEY = "avert_guard_settings";
+const DEFAULT_AVERT_GUARD_SETTINGS = {
+  app: {
+    name: "AVERT GUARD",
+    theme: "dark",
+  },
+  cameras: {
+    cam1: "/media/ppe_spill.mp4",
+    cam2: "/media/spill_fall.mp4",
+    cam3: "/media/posture.mp4",
+  },
+  video: {
+    resolution: "1280x720",
+  },
+  alerts: {
+    sound: true,
+    autoCapture: true,
+    email: false,
+  },
+  storage: {
+    capturePath: "./media/detection_captures/",
+  },
+  dashboard: {
+    refresh: 5000,
+  },
+};
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // UTILITAIRES COMMUNS
@@ -194,9 +236,9 @@ function setCanvasSize(canvas, video) {
   if (!canvas || !video) return;
   const w = video.clientWidth || canvas.parentElement?.clientWidth || 320;
   const h = video.clientHeight || canvas.parentElement?.clientHeight || 240;
-  canvas.width = w;
+  if (canvas.width !== w) canvas.width = w;
   canvas.style.width = w + "px";
-  canvas.height = h;
+  if (canvas.height !== h) canvas.height = h;
   canvas.style.height = h + "px";
 }
 
@@ -252,6 +294,93 @@ function _notifyDetection(result) {
   if (typeof window.onDetectionResult === "function") {
     window.onDetectionResult(result);
   }
+}
+
+function setDetectionStatus(id, text, prefix = "Detection: ") {
+  const el = document.getElementById(id);
+  if (el) el.textContent = prefix + text;
+}
+
+async function postDetectionFrame(endpoint, imageData, payload = {}) {
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken"),
+    },
+    body: JSON.stringify({ image: imageData, ...payload }),
+  });
+  return res.json();
+}
+
+function mergeSettings(base, override) {
+  const result = Array.isArray(base) ? [...base] : { ...base };
+  Object.entries(override || {}).forEach(([key, value]) => {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      base &&
+      typeof base[key] === "object"
+    ) {
+      result[key] = mergeSettings(base[key], value);
+    } else {
+      result[key] = value;
+    }
+  });
+  return result;
+}
+
+function getAvertGuardSettings() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(AVERT_GUARD_SETTINGS_KEY) || "{}",
+    );
+    return mergeSettings(DEFAULT_AVERT_GUARD_SETTINGS, saved);
+  } catch (_) {
+    return mergeSettings(DEFAULT_AVERT_GUARD_SETTINGS, {});
+  }
+}
+
+function setDeepValue(target, path, value) {
+  const parts = path.split(".");
+  let cursor = target;
+  parts.slice(0, -1).forEach((part) => {
+    cursor[part] = cursor[part] || {};
+    cursor = cursor[part];
+  });
+  cursor[parts[parts.length - 1]] = value;
+}
+
+function getDeepValue(target, path) {
+  return path
+    .split(".")
+    .reduce((value, part) => (value == null ? undefined : value[part]), target);
+}
+
+function saveAvertGuardSettings(settings) {
+  localStorage.setItem(AVERT_GUARD_SETTINGS_KEY, JSON.stringify(settings));
+  applyAvertGuardBranding(settings);
+}
+
+function applyAvertGuardBranding(settings = getAvertGuardSettings()) {
+  const name = settings.app?.name || "AVERT GUARD";
+  document.querySelectorAll(".logo-text").forEach((el) => {
+    const [first, ...rest] = name.split(/\s+/);
+    el.innerHTML = `${escapeHTML(first || "AVERT")} <span class="accent">${escapeHTML(rest.join(" ") || "GUARD")}</span>`;
+  });
+  if (document.title.includes("SafeVision")) {
+    document.title = document.title.replace(/SafeVision AI|SafeVision/g, name);
+  }
+}
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -377,7 +506,10 @@ document.addEventListener("DOMContentLoaded", () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function addAlert(severity, module, message) {
-  alertCount++;
+  if (severity === "critical") liveAlertStats.critical += 1;
+  else liveAlertStats.warnings += 1;
+  alertCount = liveAlertStats.critical + liveAlertStats.warnings;
+  updateDashboardLiveCounters();
   const badge = document.getElementById("alert-badge");
   if (badge) badge.textContent = alertCount;
 
@@ -401,6 +533,7 @@ function addAlert(severity, module, message) {
 }
 
 function playAlertSound() {
+  if (getAvertGuardSettings().alerts?.sound === false) return;
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -413,6 +546,18 @@ function playAlertSound() {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.3);
   } catch (_) {}
+}
+
+function updateDashboardLiveCounters() {
+  const critical = liveAlertStats.critical || 0;
+  const warnings = liveAlertStats.warnings || 0;
+  const total = critical + warnings;
+  const criticalEl = document.getElementById("kpi-critical");
+  const warningsEl = document.getElementById("kpi-warnings");
+  const badge = document.getElementById("alert-badge");
+  if (criticalEl) criticalEl.textContent = critical;
+  if (warningsEl) warningsEl.textContent = warnings;
+  if (badge) badge.textContent = total;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -676,6 +821,15 @@ function updateCam3Status(text) {
   if (el) el.textContent = "Detection: " + text;
 }
 
+function updateCam3FallStatus(text) {
+  setDetectionStatus("cam3-fall-status", text);
+}
+
+function updateCam3HybridStatus(text) {
+  updateCam3FallStatus(text);
+  setDetectionStatus("cam3-spill-status", text);
+}
+
 function drawSpillOverlay(canvasId, data, video, isSpill) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
@@ -844,6 +998,20 @@ function stopCam3Detection() {
 function updateCam4Status(text) {
   const el = document.getElementById("cam4-ppe-status");
   if (el) el.textContent = "Detection: " + text;
+}
+
+function updateCam4SpillStatus(text) {
+  setDetectionStatus("cam4-spill-status", text);
+}
+
+function updateCam4PostureStatus(text) {
+  setDetectionStatus("cam4-posture-status", text);
+}
+
+function updateCam4HybridStatus(text) {
+  updateCam4Status(text);
+  updateCam4SpillStatus(text);
+  updateCam4PostureStatus(text);
 }
 
 function drawPPEOverlay(canvasId, data, video, isViolation) {
@@ -1380,6 +1548,15 @@ function updateCam7Status(text) {
   if (el) el.textContent = "Detection: " + text;
 }
 
+function updateCam7ProximityStatus(text) {
+  setDetectionStatus("cam7-proximity-status", text);
+}
+
+function updateCam7HybridStatus(text) {
+  updateCam7Status(text);
+  updateCam7ProximityStatus(text);
+}
+
 function drawSignOverlay(canvasId, data, video, isDefective) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
@@ -1715,8 +1892,12 @@ function startCam8Detection(video) {
   cam8ResetPending = true;
   cam8FrameLoopToken += 1;
   _clearCam8FrameSchedule();
-  _scheduleNextCam8Frame(video, cam8FrameLoopToken);
-  updateCam8Status("Analyse active (chaque frame)");
+  analyzeCam8Frame(video, { reset: true });
+  cam8DetectionInterval = setInterval(
+    () => analyzeCam8Frame(video),
+    WORKER_TRACKING_INTERVAL_MS,
+  );
+  updateCam8Status("Analyse active");
 }
 
 function stopCam8Detection() {
@@ -1724,6 +1905,10 @@ function stopCam8Detection() {
   cam8RequestInFlight = false;
   cam8LastVideoTime = 0;
   cam8ResetPending = false;
+  if (cam8DetectionInterval) {
+    clearInterval(cam8DetectionInterval);
+    cam8DetectionInterval = null;
+  }
   _clearCam8FrameSchedule();
   cam8LoopVideoRef = null;
   clearOverlayCanvas("cam8-overlay-canvas");
@@ -1780,24 +1965,32 @@ function updateCam8ProximityStatus(text) {
   if (el) el.textContent = "Détection: " + text;
 }
 
-function drawProximityOverlay(canvasId, details, video, proximity_detected) {
+function drawProximityOverlay(
+  canvasId,
+  details,
+  video,
+  proximity_detected,
+  clearCanvas = true,
+) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
   setCanvasSize(canvas, video);
   const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (clearCanvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
   const rect = getContainedVideoRect(canvas, video);
 
   // Draw bounding boxes for workers (green) and machines (orange)
   if (details && details.detections) {
     for (const det of details.detections) {
+      if (!Array.isArray(det.bbox) || det.bbox.length < 4) continue;
       const [x1, y1, x2, y2] = det.bbox;
       const rx = rect.x + x1 * rect.scaleX;
       const ry = rect.y + y1 * rect.scaleY;
       const rw = (x2 - x1) * rect.scaleX;
       const rh = (y2 - y1) * rect.scaleY;
       let color = "rgba(74,227,181,0.8)"; // green for worker
-      if (det.label.toLowerCase().includes("machine")) {
+      const label = det.label || det.class_name || `class ${det.class ?? ""}`;
+      if (String(label).toLowerCase().includes("machine")) {
         color = "rgba(255,107,0,0.8)"; // orange for machine
       }
       ctx.strokeStyle = color;
@@ -1805,7 +1998,6 @@ function drawProximityOverlay(canvasId, details, video, proximity_detected) {
       ctx.strokeRect(rx, ry, rw, rh);
       ctx.fillStyle = color;
       ctx.font = "bold 10px monospace";
-      const label = det.label;
       const tw = ctx.measureText(label).width;
       ctx.fillRect(rx, ry - 16, tw + 6, 16);
       ctx.fillStyle = "#fff";
@@ -1825,6 +2017,26 @@ function drawProximityOverlay(canvasId, details, video, proximity_detected) {
       if (alert.severity === "critical")
         color = "rgba(255,59,47,0.5)"; // red
       else if (alert.severity === "warning") color = "rgba(255,184,0,0.5)"; // yellow
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(rx, ry, radius, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+  }
+
+  if (details && Array.isArray(details.incident_logs)) {
+    for (const incident of details.incident_logs) {
+      const workerBox = incident.worker?.bbox;
+      if (!Array.isArray(workerBox) || workerBox.length < 4) continue;
+      const workerCenterX = (workerBox[0] + workerBox[2]) / 2;
+      const workerCenterY = (workerBox[1] + workerBox[3]) / 2;
+      const rx = rect.x + workerCenterX * rect.scaleX;
+      const ry = rect.y + workerCenterY * rect.scaleY;
+      const radius = Math.max(16, Number(incident.distance_m || 1) * 50);
+      let color = "rgba(0,194,255,0.5)";
+      if (incident.severity === "critical") color = "rgba(255,59,47,0.55)";
+      else if (incident.severity === "alert") color = "rgba(255,184,0,0.55)";
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -2036,6 +2248,14 @@ function updateCam9Status(text) {
   if (el) el.textContent = "Detection: " + text;
 }
 
+function updateCam9PPEStatus(text) {
+  setDetectionStatus("cam9-ppe-status", text, "PPE: ");
+}
+
+function cam9PPEEnabled() {
+  return Boolean(document.getElementById("cam9-ppe-status"));
+}
+
 // COCO-17 skeleton connections [from, to]
 const POSE_SKELETON = [
   [0, 1],
@@ -2056,12 +2276,12 @@ const POSE_SKELETON = [
   [14, 16],
 ];
 
-function drawPostureOverlay(canvasId, details, video, isUnsafe) {
+function drawPostureOverlay(canvasId, details, video, isUnsafe, clearCanvas = true) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
   setCanvasSize(canvas, video);
   const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (clearCanvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
   const rect = getContainedVideoRect(canvas, video);
 
   const safeColor = "rgba(74,227,181,0.95)";
@@ -2222,15 +2442,111 @@ async function analyzePostureFrame(video) {
   }
 }
 
+async function analyzeCam9PosturePPEFrame(video) {
+  if (!video || video.paused || video.ended) return;
+  if (cam9HybridRequestInFlight) return;
+  cam9HybridRequestInFlight = true;
+
+  const imageData = captureVideoFrame(video);
+  if (!imageData) {
+    updateCam9Status("Capture impossible");
+    updateCam9PPEStatus("Capture impossible");
+    cam9HybridRequestInFlight = false;
+    return;
+  }
+  updateCam9Status("Analyse posture...");
+  updateCam9PPEStatus("Analyse PPE...");
+
+  try {
+    const [posture, ppe] = await Promise.all([
+      postDetectionFrame("/api/posture-detection/", imageData, { camera: "cam9" }),
+      postDetectionFrame("/api/ppe-detection/", imageData, { camera: "cam9" }),
+    ]);
+
+    if (posture.status !== "success" || ppe.status !== "success") {
+      updateCam9Status("Erreur API");
+      updateCam9PPEStatus("Erreur API");
+      clearOverlayCanvas("cam9-overlay-canvas");
+      return;
+    }
+
+    const postureUnsafe = Boolean(posture.unsafe_posture_detected);
+    const posturePct = Math.round((posture.confidence || 0) * 100);
+    const ppeViolation = Boolean(ppe.ppe_violation);
+    const ppePct = Math.round((ppe.confidence || 0) * 100);
+
+    updateCam9Status(
+      postureUnsafe ? `UNSAFE (${posturePct}%)` : `SAFE (${posturePct}%)`,
+    );
+    updateCam9PPEStatus(
+      ppeViolation ? `VIOLATION (${ppePct}%)` : `OK (${ppePct}%)`,
+    );
+
+    drawPPEOverlay("cam9-overlay-canvas", ppe.details || {}, video, ppeViolation);
+    drawPostureOverlay(
+      "cam9-overlay-canvas",
+      posture.details || {},
+      video,
+      postureUnsafe,
+      false,
+    );
+
+    const now = Date.now();
+    if (postureUnsafe && now - postureLastAlertAt > POSTURE_ALERT_COOLDOWN_MS) {
+      postureLastAlertAt = now;
+      const reasons = (posture.details?.reasons || []).slice(0, 2).join(", ");
+      addAlert(
+        "warning",
+        "Posture",
+        `Posture incorrecte sur CAM9 (${posturePct}%)`,
+      );
+      showPopupNotification(
+        `[CAM9] Posture UNSAFE (${posturePct}%) ${reasons}`,
+        "warning",
+      );
+    }
+    if (ppeViolation && now - ppeLastAlertAt > PPE_ALERT_COOLDOWN_MS) {
+      ppeLastAlertAt = now;
+      addAlert("warning", "PPE", `Violation EPI detectee sur posture.mp4`);
+      showPopupNotification(`[CAM9] Violation EPI (${ppePct}%)`, "warning");
+    }
+
+    _notifyDetection({
+      cam: "cam9",
+      type: "posture",
+      detected: postureUnsafe,
+      confidence: posture.confidence,
+      details: posture.details || {},
+    });
+    _notifyDetection({
+      cam: "cam9",
+      type: "ppe_violation",
+      detected: ppeViolation,
+      confidence: ppe.confidence,
+      details: ppe.details || {},
+    });
+  } catch (err) {
+    updateCam9Status("Erreur detection");
+    updateCam9PPEStatus("Erreur detection");
+    console.error("[SafeVision] fetch cam9 posture+ppe:", err);
+  } finally {
+    cam9HybridRequestInFlight = false;
+  }
+}
+
 function startCam9Detection(video) {
   if (!video || cam9DetectionInterval) return;
-  analyzePostureFrame(video);
+  const analyzer = cam9PPEEnabled()
+    ? analyzeCam9PosturePPEFrame
+    : analyzePostureFrame;
+  analyzer(video);
   cam9DetectionInterval = setInterval(
-    () => analyzePostureFrame(video),
+    () => analyzer(video),
     POSTURE_ANALYSIS_INTERVAL_MS,
   );
   cam9VideoAnalysisActive = true;
-  updateCam9Status("Analyse active");
+  updateCam9Status(cam9PPEEnabled() ? "Analyse posture + PPE active" : "Analyse active");
+  if (cam9PPEEnabled()) updateCam9PPEStatus("Analyse active");
 }
 
 function stopCam9Detection() {
@@ -2239,8 +2555,10 @@ function stopCam9Detection() {
     cam9DetectionInterval = null;
   }
   cam9VideoAnalysisActive = false;
+  cam9HybridRequestInFlight = false;
   clearOverlayCanvas("cam9-overlay-canvas");
   updateCam9Status("Analyse arretee");
+  if (cam9PPEEnabled()) updateCam9PPEStatus("Analyse arretee");
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2434,6 +2752,15 @@ function stopCam10Detection() {
 function updateCam12Status(text) {
   const el = document.getElementById("cam12-fire-status");
   if (el) el.textContent = "Detection: " + text;
+}
+
+function updateCam12ProximityStatus(text) {
+  setDetectionStatus("cam12-proximity-status", text);
+}
+
+function updateCam12HybridStatus(text) {
+  updateCam12Status(text);
+  updateCam12ProximityStatus(text);
 }
 
 function updateCam13Status(text) {
@@ -2651,7 +2978,7 @@ if (videoUploadEl) {
     const file = e.target.files[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    document.title = `[${file.name}] — SafeVision AI`;
+    document.title = `[${file.name}] - AVERT GUARD`;
 
     const cam4Feed =
       document.getElementById("cam-feed-4") ||
@@ -2691,7 +3018,7 @@ if (videoUploadEl) {
       return;
     }
     if (document.getElementById("main-video")) {
-      loadDashboardVideoSource(url, file.name, true);
+      loadDashboardVideoSource(url, file.name, true, "upload");
     }
   });
 }
@@ -2699,9 +3026,7 @@ if (videoUploadEl) {
 const camSelect = document.getElementById("camera-select");
 if (camSelect) {
   camSelect.addEventListener("change", function () {
-    if (this.value === "Fichier vidéo...") {
-      document.getElementById("video-upload")?.click();
-    }
+    handleCameraSelectChange(this);
   });
 }
 
@@ -2751,8 +3076,13 @@ function drawDashboardBox(ctx, rect, bbox, stroke, fill, label) {
   }
 }
 
-function drawDashboardHybridOverlay(video, ppeData, spillData) {
-  const canvas = document.getElementById("main-overlay-canvas");
+function drawDashboardHybridOverlay(
+  video,
+  ppeData,
+  spillData,
+  canvasId = "main-overlay-canvas",
+) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
   setCanvasSize(canvas, video);
   const ctx = canvas.getContext("2d");
@@ -2846,8 +3176,13 @@ function drawDashboardHybridOverlay(video, ppeData, spillData) {
   });
 }
 
-function drawDashboardFallSpillOverlay(video, fallData, spillData) {
-  const canvas = document.getElementById("fall-spill-overlay-canvas");
+function drawDashboardFallSpillOverlay(
+  video,
+  fallData,
+  spillData,
+  canvasId = "fall-spill-overlay-canvas",
+) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas || !video) return;
   setCanvasSize(canvas, video);
   const ctx = canvas.getContext("2d");
@@ -2925,6 +3260,499 @@ function drawDashboardFallSpillOverlay(video, fallData, spillData) {
     ctx.fillText(badge.text, x + 9, 27);
     x += w + 8;
   });
+}
+
+function getProximityStatusText(data) {
+  const det = data?.details || {};
+  const nW = det.workers_count || 0;
+  const nM = det.machines_count || 0;
+  const sev = det.severity || "safe";
+  const incidents = det.incident_logs || [];
+  if (incidents.length > 0) {
+    const minDist = Math.min(...incidents.map((i) => i.distance_m || 99));
+    const labels = {
+      critical: "CRITIQUE",
+      alert: "ALERTE",
+      vigilance: "VIGILANCE",
+    };
+    return `${labels[sev] || "OK"} ${minDist.toFixed(1)}m (${nW}W ${nM}M)`;
+  }
+  return `OK (${nW}W ${nM}M)`;
+}
+
+function notifyProximityDetection(cameraId, data) {
+  const details = data?.details || {};
+  const incidents = details.incident_logs || [];
+  const now = Date.now();
+  if (
+    data?.proximity_detected &&
+    incidents.length > 0 &&
+    now - proximityLastAlertAt > PROXIMITY_ALERT_COOLDOWN_MS
+  ) {
+    proximityLastAlertAt = now;
+    const minDist = Math.min(...incidents.map((i) => i.distance_m || 99));
+    const severity = details.severity === "critical" ? "critical" : "warning";
+    addAlert(
+      severity,
+      "Proximite",
+      `Proximite dangereuse sur ${cameraId.toUpperCase()} (${minDist.toFixed(1)}m)`,
+    );
+    showPopupNotification(
+      `[${cameraId.toUpperCase()}] Proximite dangereuse (${minDist.toFixed(1)}m)`,
+      severity,
+    );
+  }
+}
+
+async function analyzeCam3HybridFrame(video) {
+  if (
+    !cam3HybridActive ||
+    cam3HybridRequestInFlight ||
+    !video ||
+    video.paused ||
+    video.ended
+  )
+    return;
+
+  const imageData = captureVideoFrame(video);
+  if (!imageData) {
+    updateCam3HybridStatus("Capture impossible");
+    return;
+  }
+
+  cam3HybridRequestInFlight = true;
+  updateCam3FallStatus("Analyse FALL...");
+  setDetectionStatus("cam3-spill-status", "Analyse SPILL...");
+
+  try {
+    const camera = "cam3-spill-fall";
+    const [fall, spill] = await Promise.all([
+      postDetectionFrame("/api/fall-detection/", imageData, { camera }),
+      postDetectionFrame("/api/spill-detection/", imageData, { camera }),
+    ]);
+
+    if (fall.status !== "success" || spill.status !== "success") {
+      updateCam3HybridStatus("Erreur API");
+      clearOverlayCanvas("cam3-overlay-canvas");
+      return;
+    }
+
+    const fallPct = Math.round((fall.confidence || 0) * 100);
+    const spillPct = Math.round((spill.confidence || 0) * 100);
+    updateCam3FallStatus(
+      fall.fall_detected ? `FALL (${fallPct}%)` : `FALL OK (${fallPct}%)`,
+    );
+    setDetectionStatus(
+      "cam3-spill-status",
+      spill.spill_detected ? `SPILL (${spillPct}%)` : `SPILL OK (${spillPct}%)`,
+    );
+
+    drawDashboardFallSpillOverlay(video, fall, spill, "cam3-overlay-canvas");
+
+    const now = Date.now();
+    if (fall.fall_detected && now - (spillLastAlertAt.cam3Fall || 0) > 9000) {
+      spillLastAlertAt.cam3Fall = now;
+      addAlert("critical", "Fall", `Chute detectee sur ${camera} (${fallPct}%)`);
+      showPopupNotification(`[CAM3] Chute detectee (${fallPct}%)`, "critical");
+    }
+    if (
+      spill.spill_detected &&
+      now - (spillLastAlertAt.cam3 || 0) > SPILL_ALERT_COOLDOWN_MS
+    ) {
+      spillLastAlertAt.cam3 = now;
+      addAlert("critical", "Spill", `Deversement detecte sur ${camera}`);
+      showPopupNotification(`[CAM3] Deversement detecte (${spillPct}%)`, "critical");
+    }
+
+    _notifyDetection({
+      cam: camera,
+      type: "fall",
+      detected: fall.fall_detected,
+      confidence: fall.confidence,
+      details: fall.details || {},
+    });
+    _notifyDetection({
+      cam: camera,
+      type: "spill",
+      detected: spill.spill_detected,
+      confidence: spill.confidence,
+      details: spill.details || {},
+    });
+  } catch (err) {
+    updateCam3HybridStatus("Erreur detection");
+    console.error("[SafeVision] cam3 FALL+SPILL:", err);
+  } finally {
+    cam3HybridRequestInFlight = false;
+  }
+}
+
+function startCam3HybridDetection(video) {
+  if (!video || cam3HybridInterval) return;
+  cam3HybridActive = true;
+  analyzeCam3HybridFrame(video);
+  cam3HybridInterval = setInterval(
+    () => analyzeCam3HybridFrame(video),
+    LIVE_HYBRID_INTERVAL_MS,
+  );
+  updateCam3HybridStatus("Analyse active");
+}
+
+function stopCam3HybridDetection() {
+  if (cam3HybridInterval) {
+    clearInterval(cam3HybridInterval);
+    cam3HybridInterval = null;
+  }
+  cam3HybridActive = false;
+  cam3HybridRequestInFlight = false;
+  clearOverlayCanvas("cam3-overlay-canvas");
+  updateCam3HybridStatus("Analyse arretee");
+}
+
+async function analyzeCam4HybridFrame(video) {
+  if (
+    !cam4HybridActive ||
+    cam4HybridRequestInFlight ||
+    !video ||
+    video.paused ||
+    video.ended
+  )
+    return;
+
+  const imageData = captureVideoFrame(video);
+  if (!imageData) {
+    updateCam4HybridStatus("Capture impossible");
+    return;
+  }
+
+  cam4HybridRequestInFlight = true;
+  updateCam4Status("Analyse PPE...");
+  updateCam4SpillStatus("Analyse SPILL...");
+  updateCam4PostureStatus("Analyse POSTURE...");
+
+  try {
+    const camera = "cam4-ppe-spill";
+    const [ppe, spill, posture] = await Promise.all([
+      postDetectionFrame("/api/ppe-detection/", imageData, { camera }),
+      postDetectionFrame("/api/spill-detection/", imageData, { camera }),
+      postDetectionFrame("/api/posture-detection/", imageData, { camera }),
+    ]);
+
+    if (
+      ppe.status !== "success" ||
+      spill.status !== "success" ||
+      posture.status !== "success"
+    ) {
+      updateCam4HybridStatus("Erreur API");
+      clearOverlayCanvas("cam4-overlay-canvas");
+      return;
+    }
+
+    const ppePct = Math.round((ppe.confidence || 0) * 100);
+    const spillPct = Math.round((spill.confidence || 0) * 100);
+    const posturePct = Math.round((posture.confidence || 0) * 100);
+    const postureUnsafe = Boolean(posture.unsafe_posture_detected);
+    updateCam4Status(
+      ppe.ppe_violation ? `VIOLATION (${ppePct}%)` : `OK (${ppePct}%)`,
+    );
+    updateCam4SpillStatus(
+      spill.spill_detected ? `SPILL (${spillPct}%)` : `SPILL OK (${spillPct}%)`,
+    );
+    updateCam4PostureStatus(
+      postureUnsafe ? `UNSAFE (${posturePct}%)` : `SAFE (${posturePct}%)`,
+    );
+
+    drawDashboardHybridOverlay(video, ppe, spill, "cam4-overlay-canvas");
+    drawPostureOverlay(
+      "cam4-overlay-canvas",
+      posture.details || {},
+      video,
+      postureUnsafe,
+      false,
+    );
+
+    const now = Date.now();
+    if (ppe.ppe_violation && now - ppeLastAlertAt > PPE_ALERT_COOLDOWN_MS) {
+      ppeLastAlertAt = now;
+      addAlert("warning", "PPE", `Violation EPI detectee sur ${camera}`);
+      showPopupNotification(`[CAM4] Violation EPI (${ppePct}%)`, "warning");
+    }
+    if (
+      spill.spill_detected &&
+      now - (spillLastAlertAt.cam4 || 0) > SPILL_ALERT_COOLDOWN_MS
+    ) {
+      spillLastAlertAt.cam4 = now;
+      addAlert("critical", "Spill", `Deversement detecte sur ${camera}`);
+      showPopupNotification(`[CAM4] Deversement detecte (${spillPct}%)`, "critical");
+    }
+    if (postureUnsafe && now - postureLastAlertAt > POSTURE_ALERT_COOLDOWN_MS) {
+      postureLastAlertAt = now;
+      addAlert("warning", "Posture", `Posture incorrecte sur ${camera}`);
+      showPopupNotification(`[CAM4] Posture UNSAFE (${posturePct}%)`, "warning");
+    }
+
+    _notifyDetection({
+      cam: camera,
+      type: "ppe",
+      detected: ppe.ppe_violation,
+      confidence: ppe.confidence,
+      details: ppe.details || {},
+    });
+    _notifyDetection({
+      cam: camera,
+      type: "spill",
+      detected: spill.spill_detected,
+      confidence: spill.confidence,
+      details: spill.details || {},
+    });
+    _notifyDetection({
+      cam: camera,
+      type: "posture",
+      detected: postureUnsafe,
+      confidence: posture.confidence,
+      details: posture.details || {},
+    });
+  } catch (err) {
+    updateCam4HybridStatus("Erreur detection");
+    console.error("[SafeVision] cam4 PPE+SPILL+POSTURE:", err);
+  } finally {
+    cam4HybridRequestInFlight = false;
+  }
+}
+
+function startCam4HybridDetection(video) {
+  if (!video || cam4HybridInterval) return;
+  cam4HybridActive = true;
+  analyzeCam4HybridFrame(video);
+  cam4HybridInterval = setInterval(
+    () => analyzeCam4HybridFrame(video),
+    LIVE_HEAVY_HYBRID_INTERVAL_MS,
+  );
+  updateCam4HybridStatus("Analyse active");
+}
+
+function stopCam4HybridDetection() {
+  if (cam4HybridInterval) {
+    clearInterval(cam4HybridInterval);
+    cam4HybridInterval = null;
+  }
+  cam4HybridActive = false;
+  cam4HybridRequestInFlight = false;
+  clearOverlayCanvas("cam4-overlay-canvas");
+  updateCam4HybridStatus("Analyse arretee");
+}
+
+async function analyzeCam7HybridFrame(video) {
+  if (
+    !cam7HybridActive ||
+    cam7HybridRequestInFlight ||
+    !video ||
+    video.paused ||
+    video.ended
+  )
+    return;
+
+  const imageData = captureVideoFrame(video);
+  if (!imageData) {
+    updateCam7HybridStatus("Capture impossible");
+    return;
+  }
+
+  cam7HybridRequestInFlight = true;
+  updateCam7Status("Analyse SIGNS...");
+  updateCam7ProximityStatus("Analyse PROXIMITY...");
+
+  try {
+    const camera = "cam7-signs-machine";
+    const [sign, proximity] = await Promise.all([
+      postDetectionFrame("/api/sign-detect/", imageData, { camera }),
+      postDetectionFrame("/api/proximity-detection/", imageData, { camera }),
+    ]);
+
+    if (sign.status !== "success" || proximity.status !== "success") {
+      updateCam7HybridStatus("Erreur API");
+      clearOverlayCanvas("cam7-overlay-canvas");
+      return;
+    }
+
+    const result = sign.data || {};
+    const isDefective = Boolean(result.is_defective);
+    const signPct = Math.round((result.defect_score || 0) * 100);
+    updateCam7Status(`${result.verdict || "UNKNOWN"} (${signPct}%)`);
+    updateCam7ProximityStatus(getProximityStatusText(proximity));
+
+    drawSignOverlay("cam7-overlay-canvas", result, video, isDefective);
+    drawProximityOverlay(
+      "cam7-overlay-canvas",
+      proximity.details || {},
+      video,
+      proximity.proximity_detected,
+      false,
+    );
+
+    const now = Date.now();
+    if (isDefective && now - signLastAlertAt > SIGN_ALERT_COOLDOWN_MS) {
+      signLastAlertAt = now;
+      addAlert("warning", "Sign", `Panneau defectueux detecte sur ${camera}`);
+      showPopupNotification(`[CAM7] Panneau defectueux (${signPct}%)`, "warning");
+    }
+    notifyProximityDetection(camera, proximity);
+
+    _notifyDetection({
+      cam: camera,
+      type: "sign_defect",
+      detected: isDefective,
+      confidence: result.defect_score,
+      details: result,
+    });
+    _notifyDetection({
+      cam: camera,
+      type: "proximity",
+      detected: proximity.proximity_detected,
+      confidence: proximity.confidence,
+      details: proximity.details || {},
+    });
+  } catch (err) {
+    updateCam7HybridStatus("Erreur detection");
+    console.error("[SafeVision] cam7 SIGNS+PROXIMITY:", err);
+  } finally {
+    cam7HybridRequestInFlight = false;
+  }
+}
+
+function startCam7HybridDetection(video) {
+  if (!video || cam7HybridInterval) return;
+  cam7HybridActive = true;
+  analyzeCam7HybridFrame(video);
+  cam7HybridInterval = setInterval(
+    () => analyzeCam7HybridFrame(video),
+    LIVE_HEAVY_HYBRID_INTERVAL_MS,
+  );
+  updateCam7HybridStatus("Analyse active");
+}
+
+function stopCam7HybridDetection() {
+  if (cam7HybridInterval) {
+    clearInterval(cam7HybridInterval);
+    cam7HybridInterval = null;
+  }
+  cam7HybridActive = false;
+  cam7HybridRequestInFlight = false;
+  clearOverlayCanvas("cam7-overlay-canvas");
+  updateCam7HybridStatus("Analyse arretee");
+}
+
+async function analyzeCam12HybridFrame(video) {
+  if (
+    !cam12HybridActive ||
+    cam12HybridRequestInFlight ||
+    !video ||
+    video.paused ||
+    video.ended
+  )
+    return;
+
+  const imageData = captureVideoFrame(video);
+  if (!imageData) {
+    updateCam12HybridStatus("Capture impossible");
+    return;
+  }
+
+  cam12HybridRequestInFlight = true;
+  updateCam12Status("Analyse FIRE...");
+  updateCam12ProximityStatus("Analyse PROXIMITY...");
+
+  try {
+    const camera = "cam12-fire-machine";
+    const [fire, proximity] = await Promise.all([
+      postDetectionFrame("/api/fire-detection/", imageData, { camera }),
+      postDetectionFrame("/api/proximity-detection/", imageData, { camera }),
+    ]);
+
+    if (fire.status !== "success" || proximity.status !== "success") {
+      updateCam12HybridStatus("Erreur API");
+      clearOverlayCanvas("cam12-overlay-canvas");
+      return;
+    }
+
+    const fireDetected = Boolean(fire.fire_detected);
+    const smokeDetected = Boolean(fire.smoke_detected);
+    const firePct = Math.round((fire.confidence || 0) * 100);
+    updateCam12Status(
+      fireDetected
+        ? `FEU (${firePct}%)`
+        : smokeDetected
+          ? `FUMEE (${firePct}%)`
+          : `OK (${firePct}%)`,
+    );
+    updateCam12ProximityStatus(getProximityStatusText(proximity));
+
+    drawFireOverlay(
+      "cam12-overlay-canvas",
+      fire.details || {},
+      video,
+      fireDetected,
+      smokeDetected,
+    );
+    drawProximityOverlay(
+      "cam12-overlay-canvas",
+      proximity.details || {},
+      video,
+      proximity.proximity_detected,
+      false,
+    );
+
+    const now = Date.now();
+    if ((fireDetected || smokeDetected) && now - fireLastAlertAt > FIRE_ALERT_COOLDOWN_MS) {
+      fireLastAlertAt = now;
+      const label = fireDetected ? "FEU" : "FUMEE";
+      const severity = fireDetected ? "critical" : "warning";
+      addAlert(severity, label, `${label} detecte sur ${camera} (${firePct}%)`);
+      showPopupNotification(`[CAM12] ${label} detecte (${firePct}%)`, severity);
+    }
+    notifyProximityDetection(camera, proximity);
+
+    _notifyDetection({
+      cam: camera,
+      type: "fire",
+      detected: fireDetected || smokeDetected,
+      confidence: fire.confidence,
+      details: fire.details || {},
+    });
+    _notifyDetection({
+      cam: camera,
+      type: "proximity",
+      detected: proximity.proximity_detected,
+      confidence: proximity.confidence,
+      details: proximity.details || {},
+    });
+  } catch (err) {
+    updateCam12HybridStatus("Erreur detection");
+    console.error("[SafeVision] cam12 FIRE+PROXIMITY:", err);
+  } finally {
+    cam12HybridRequestInFlight = false;
+  }
+}
+
+function startCam12HybridDetection(video) {
+  if (!video || cam12HybridInterval) return;
+  cam12HybridActive = true;
+  analyzeCam12HybridFrame(video);
+  cam12HybridInterval = setInterval(
+    () => analyzeCam12HybridFrame(video),
+    LIVE_HEAVY_HYBRID_INTERVAL_MS,
+  );
+  updateCam12HybridStatus("Analyse active");
+}
+
+function stopCam12HybridDetection() {
+  if (cam12HybridInterval) {
+    clearInterval(cam12HybridInterval);
+    cam12HybridInterval = null;
+  }
+  cam12HybridActive = false;
+  cam12HybridRequestInFlight = false;
+  clearOverlayCanvas("cam12-overlay-canvas");
+  updateCam12HybridStatus("Analyse arretee");
 }
 
 async function analyzeDashboardHybridFrame(video) {
@@ -3251,20 +4079,26 @@ async function analyzeDashboardFallSpillFrame(video) {
 }
 
 function initializeDashboardHybrid() {
+  const settings = getAvertGuardSettings();
   const video = document.getElementById("main-video");
   if (video) {
-    video.src = DASHBOARD_PPE_SPILL_SRC + "?v=" + Date.now();
+    video.dataset.dashboardMode = "dashboard-ppe-spill";
+    video.src = withDashboardCacheBuster(
+      settings.cameras?.cam1 || DASHBOARD_PPE_SPILL_SRC,
+    );
     video.load();
-    updateDashboardHybridStatus("Pret - ppe_spill.mp4");
+    updateDashboardHybridStatus("Pret - PPE + Spill");
     const info = document.getElementById("video-info");
     if (info) info.style.display = "flex";
   }
 
   const fallSpillVideo = document.getElementById("fall-spill-video");
   if (fallSpillVideo) {
-    fallSpillVideo.src = DASHBOARD_SPILL_FALL_SRC + "?v=" + Date.now();
+    fallSpillVideo.src = withDashboardCacheBuster(
+      settings.cameras?.cam2 || DASHBOARD_SPILL_FALL_SRC,
+    );
     fallSpillVideo.load();
-    updateDashboardFallSpillStatus("Pret - spill_fall.mp4");
+    updateDashboardFallSpillStatus("Pret - Chute + Spill");
     const info = document.getElementById("fall-spill-video-info");
     if (info) info.style.display = "flex";
   }
@@ -3273,7 +4107,7 @@ function initializeDashboardHybrid() {
 function startAnalysis() {
   const video = document.getElementById("main-video");
   if (video) {
-    if (!video.src) video.src = DASHBOARD_PPE_SPILL_SRC + "?v=" + Date.now();
+    if (!video.src) video.src = withDashboardCacheBuster(DASHBOARD_PPE_SPILL_SRC);
     dashboardHybridActive = true;
     dashboardHybridStartedAt = performance.now();
     video.dataset.shouldRun = "1";
@@ -3285,6 +4119,11 @@ function startAnalysis() {
         .catch((err) =>
           console.error("[SafeVision] dashboard PPE+SPILL play:", err),
         );
+      const mode = video.dataset.dashboardMode || "dashboard-ppe-spill";
+      if (!["dashboard-ppe-spill", "upload"].includes(mode)) {
+        updateDashboardHybridStatus("Lecture video - IA dediee dans Flux/Module");
+        return;
+      }
       if (!dashboardHybridInterval) {
         analyzeDashboardHybridFrame(video);
         dashboardHybridInterval = setInterval(
@@ -3303,7 +4142,7 @@ function startAnalysis() {
   const fallSpillVideo = document.getElementById("fall-spill-video");
   if (fallSpillVideo) {
     if (!fallSpillVideo.src)
-      fallSpillVideo.src = DASHBOARD_SPILL_FALL_SRC + "?v=" + Date.now();
+      fallSpillVideo.src = withDashboardCacheBuster(DASHBOARD_SPILL_FALL_SRC);
     dashboardFallSpillActive = true;
     fallSpillVideo.dataset.shouldRun = "1";
     fallSpillVideo.loop = true;
@@ -3370,10 +4209,12 @@ function loadDashboardVideoSource(
   src,
   label = "ppe_spill.mp4",
   autoplay = false,
+  mode = "dashboard-ppe-spill",
 ) {
   const video = document.getElementById("main-video");
   if (!video) return;
   stopAnalysis();
+  video.dataset.dashboardMode = mode;
   video.src = src;
   video.load();
   const overlay = document.getElementById("main-video-overlay");
@@ -3381,9 +4222,70 @@ function loadDashboardVideoSource(
     const first = overlay.querySelector("span");
     if (first) first.textContent = `Fichier: ${label}`;
   }
-  updateDashboardHybridStatus("Pret");
+  updateDashboardHybridStatus(mode === "dashboard-ppe-spill" || mode === "upload" ? "Pret" : "Source chargee");
   if (autoplay)
     video.addEventListener("loadeddata", () => startAnalysis(), { once: true });
+}
+
+function loadDashboardFallSpillSource(
+  src,
+  label = "spill_fall.mp4",
+  autoplay = false,
+) {
+  const video = document.getElementById("fall-spill-video");
+  if (!video) return;
+  stopAnalysis();
+  video.src = src;
+  video.load();
+  const overlay = document.getElementById("fall-spill-video-overlay");
+  if (overlay) {
+    const first = overlay.querySelector("span");
+    if (first) first.textContent = `Fichier: ${label}`;
+  }
+  updateDashboardFallSpillStatus("Pret");
+  if (autoplay)
+    video.addEventListener("loadeddata", () => startAnalysis(), { once: true });
+}
+
+function withDashboardCacheBuster(src) {
+  if (!src || src.startsWith("blob:") || /^https?:/i.test(src)) return src;
+  return `${src}${src.includes("?") ? "&" : "?"}v=${Date.now()}`;
+}
+
+function handleCameraSelectChange(select) {
+  const option = select?.selectedOptions?.[0];
+  if (!option) return;
+  if (select.value === "upload") {
+    document.getElementById("video-upload")?.click();
+    return;
+  }
+  const src = option.dataset.source;
+  const label = option.dataset.label || option.textContent.trim();
+  if (!src || !document.getElementById("main-video")) return;
+  if (select.value === "dashboard-spill-fall") {
+    loadDashboardFallSpillSource(src, label, false);
+    showPopupNotification(`Scenario charge: ${label}`, "info", false);
+    return;
+  }
+  loadDashboardVideoSource(src, label, false, select.value);
+  showPopupNotification(`Source dashboard chargee: ${label}`, "info", false);
+}
+
+function applySettingsToCameraSelector() {
+  const settings = getAvertGuardSettings();
+  const mappings = {
+    "dashboard-ppe-spill": settings.cameras?.cam1,
+    "dashboard-spill-fall": settings.cameras?.cam2,
+    "dashboard-posture": settings.cameras?.cam3,
+  };
+  Object.entries(mappings).forEach(([value, src]) => {
+    const option = document.querySelector(`#camera-select option[value="${value}"]`);
+    if (option && src) option.dataset.source = src;
+  });
+}
+
+function showDashboardHistory() {
+  window.location.href = "/reports/";
 }
 
 function toggleModule(chip) {
@@ -3393,6 +4295,10 @@ function toggleModule(chip) {
   );
 }
 
+function isOptimizedLivePage() {
+  return Boolean(document.querySelector('[data-live-page="optimized"]'));
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONTRÔLES GLOBAUX
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3400,19 +4306,36 @@ function toggleModule(chip) {
 function initializeCameras() {
   if (camerasInitialized) return;
 
-  [
-    ["cam1-video", LIVE_VIDEO_SRC, updateCam1Status],
-    ["cam2-video", LIVE_VIDEO_SRC_CAM2, updateCam2Status],
-    ["cam4-video", LIVE_VIDEO_SRC_CAM4, updateCam4Status],
-    ["cam5-video", LIVE_VIDEO_SRC_CAM5, updateCam5Status],
-    ["cam6-video", LIVE_VIDEO_SRC_CAM6, updateCam6Status],
-    ["cam7-video", LIVE_VIDEO_SRC_CAM7, updateCam7Status],
-    ["cam8-video", LIVE_VIDEO_SRC_CAM8, updateCam8Status],
-    ["cam9-video", LIVE_VIDEO_SRC_CAM9, updateCam9Status],
-    ["cam10-video", LIVE_VIDEO_SRC_CAM10, updateCam10Status],
-    ["cam12-video", LIVE_VIDEO_SRC_CAM12, updateCam12Status],
-    ["cam13-video", LIVE_VIDEO_SRC_CAM13, updateCam13Status],
-  ].forEach(([id, src, statusFn]) => {
+  const livePage = isOptimizedLivePage();
+  const cameraSources = livePage
+    ? [
+        ["cam2-video", LIVE_VIDEO_SRC_CAM2, updateCam2Status],
+        ["cam3-video", LIVE_VIDEO_SRC_CAM3, updateCam3HybridStatus],
+        ["cam4-video", LIVE_VIDEO_SRC_CAM4, updateCam4HybridStatus],
+        ["cam6-video", LIVE_VIDEO_SRC_CAM6, updateCam6Status],
+        ["cam7-video", LIVE_VIDEO_SRC_CAM7, updateCam7HybridStatus],
+        ["cam8-video", LIVE_VIDEO_SRC_CAM8, updateCam8Status],
+        ["cam9-video", LIVE_VIDEO_SRC_CAM9, updateCam9Status],
+        ["cam10-video", LIVE_VIDEO_SRC_CAM10, updateCam10Status],
+        ["cam12-video", LIVE_VIDEO_SRC_CAM12, updateCam12HybridStatus],
+      ]
+    : [
+        ["cam1-video", LIVE_VIDEO_SRC, updateCam1Status],
+        ["cam2-video", LIVE_VIDEO_SRC_CAM2, updateCam2Status],
+        ["cam3-video", "/media/spill.mp4", updateCam3Status],
+        ["cam4-video", "/media/ppe_video.mp4", updateCam4Status],
+        ["cam5-video", LIVE_VIDEO_SRC_CAM5, updateCam5Status],
+        ["cam6-video", "/media/exit_emergency.mp4", updateCam6Status],
+        ["cam7-video", "/media/construction_signs2.mp4", updateCam7Status],
+        ["cam8-video", LIVE_VIDEO_SRC_CAM8, updateCam8Status],
+        ["cam9-video", LIVE_VIDEO_SRC_CAM9, updateCam9Status],
+        ["cam10-video", LIVE_VIDEO_SRC_CAM10, updateCam10Status],
+        ["cam11-video", LIVE_VIDEO_SRC_CAM8_PROXIMITY, updateCam11Status],
+        ["cam12-video", "/media/fire.mp4", updateCam12Status],
+        ["cam13-video", LIVE_VIDEO_SRC_CAM13, updateCam13Status],
+      ];
+
+  cameraSources.forEach(([id, src, statusFn]) => {
     const v = document.getElementById(id);
     if (v) {
       v.src = src + "?v=" + Date.now();
@@ -3484,6 +4407,19 @@ function startCameras() {
   camerasRunning = true;
   initializeCameras();
 
+  if (isOptimizedLivePage()) {
+    _startCamWithLoop("cam2-video", LIVE_VIDEO_SRC_CAM2, startFatigueDetection);
+    _startCamWithLoop("cam3-video", LIVE_VIDEO_SRC_CAM3, startCam3HybridDetection);
+    _startCamWithLoop("cam4-video", LIVE_VIDEO_SRC_CAM4, startCam4HybridDetection);
+    _startCamWithLoop("cam6-video", LIVE_VIDEO_SRC_CAM6, startCam6Detection);
+    _startCamWithLoop("cam7-video", LIVE_VIDEO_SRC_CAM7, startCam7HybridDetection);
+    _startCamWithLoop("cam8-video", LIVE_VIDEO_SRC_CAM8, startCam8Detection);
+    _startCamWithLoop("cam9-video", LIVE_VIDEO_SRC_CAM9, startCam9Detection);
+    _startCamWithLoop("cam10-video", LIVE_VIDEO_SRC_CAM10, startCam10Detection);
+    _startCamWithLoop("cam12-video", LIVE_VIDEO_SRC_CAM12, startCam12HybridDetection);
+    return;
+  }
+
   const cam1 = document.getElementById("cam1-video");
   if (cam1) {
     cam1.currentTime = 0;
@@ -3491,27 +4427,18 @@ function startCameras() {
     startLiveDetection(cam1);
   }
 
-  const cam2 = document.getElementById("cam2-video");
-  if (cam2) {
-    cam2.play().catch(() => {});
-    startFatigueDetection(cam2);
-  }
-
-  _startCamWithLoop("cam3-video", LIVE_VIDEO_SRC_CAM3, startCam3Detection);
-  _startCamWithLoop("cam4-video", LIVE_VIDEO_SRC_CAM4, startCam4Detection);
+  _startCamWithLoop("cam2-video", LIVE_VIDEO_SRC_CAM2, startFatigueDetection);
+  _startCamWithLoop("cam3-video", "/media/spill.mp4", startCam3Detection);
+  _startCamWithLoop("cam4-video", "/media/ppe_video.mp4", startCam4Detection);
   _startCamWithLoop("cam5-video", LIVE_VIDEO_SRC_CAM5, startCam5Detection);
-  _startCamWithLoop("cam6-video", LIVE_VIDEO_SRC_CAM6, startCam6Detection);
-  _startCamWithLoop("cam7-video", LIVE_VIDEO_SRC_CAM7, startCam7Detection);
+  _startCamWithLoop("cam6-video", "/media/exit_emergency.mp4", startCam6Detection);
+  _startCamWithLoop("cam7-video", "/media/construction_signs2.mp4", startCam7Detection);
   _startCamWithLoop("cam8-video", LIVE_VIDEO_SRC_CAM8, startCam8Detection);
   _startCamWithLoop("cam9-video", LIVE_VIDEO_SRC_CAM9, startCam9Detection);
   _startCamWithLoop("cam10-video", LIVE_VIDEO_SRC_CAM10, startCam10Detection);
-  _startCamWithLoop("cam12-video", LIVE_VIDEO_SRC_CAM12, startCam12Detection);
+  _startCamWithLoop("cam12-video", "/media/fire.mp4", startCam12Detection);
   _startCamVideoOnly("cam13-video", LIVE_VIDEO_SRC_CAM13, updateCam13Status);
-  _startCamWithLoop(
-    "cam11-video",
-    LIVE_VIDEO_SRC_CAM8_PROXIMITY,
-    startCam11Detection,
-  );
+  _startCamWithLoop("cam11-video", LIVE_VIDEO_SRC_CAM8_PROXIMITY, startCam11Detection);
 }
 
 function stopCameras() {
@@ -3532,26 +4459,40 @@ function stopCameras() {
   }
   stopFatigueDetection();
 
-  [
-    ["cam3-video", updateCam3Status, stopCam3Detection],
-    ["cam4-video", updateCam4Status, stopCam4Detection],
-    ["cam5-video", updateCam5Status, stopCam5Detection],
-    ["cam6-video", updateCam6Status, stopCam6Detection],
-    ["cam7-video", updateCam7Status, stopCam7Detection],
-    ["cam8-video", updateCam8Status, stopCam8Detection],
-    ["cam9-video", updateCam9Status, stopCam9Detection],
-    ["cam10-video", updateCam10Status, stopCam10Detection],
-    ["cam11-video", updateCam11Status, stopCam11Detection],
-    ["cam12-video", updateCam12Status, stopCam12Detection],
-    ["cam13-video", updateCam13Status, null],
-  ].forEach(([id, statusFn, stopFn]) => {
+  const livePage = isOptimizedLivePage();
+  const stopItems = livePage
+    ? [
+        ["cam3-video", updateCam3HybridStatus, stopCam3HybridDetection],
+        ["cam4-video", updateCam4HybridStatus, stopCam4HybridDetection],
+        ["cam6-video", updateCam6Status, stopCam6Detection],
+        ["cam7-video", updateCam7HybridStatus, stopCam7HybridDetection],
+        ["cam8-video", updateCam8Status, stopCam8Detection],
+        ["cam9-video", updateCam9Status, stopCam9Detection],
+        ["cam10-video", updateCam10Status, stopCam10Detection],
+        ["cam12-video", updateCam12HybridStatus, stopCam12HybridDetection],
+      ]
+    : [
+        ["cam3-video", updateCam3Status, stopCam3Detection],
+        ["cam4-video", updateCam4Status, stopCam4Detection],
+        ["cam5-video", updateCam5Status, stopCam5Detection],
+        ["cam6-video", updateCam6Status, stopCam6Detection],
+        ["cam7-video", updateCam7Status, stopCam7Detection],
+        ["cam8-video", updateCam8Status, stopCam8Detection],
+        ["cam9-video", updateCam9Status, stopCam9Detection],
+        ["cam10-video", updateCam10Status, stopCam10Detection],
+        ["cam11-video", updateCam11Status, stopCam11Detection],
+        ["cam12-video", updateCam12Status, stopCam12Detection],
+        ["cam13-video", updateCam13Status, null],
+      ];
+
+  stopItems.forEach(([id, statusFn, stopFn]) => {
     const v = document.getElementById(id);
     if (v) {
       v.dataset.shouldRun = "0";
       v.onloadeddata = null;
       v.onended = null;
       v.pause();
-      statusFn("Camera arretee");
+      if (statusFn) statusFn("Camera arretee");
     }
     if (stopFn) stopFn();
   });
@@ -3621,7 +4562,7 @@ function applyTheme(theme) {
   localStorage.setItem("theme", theme);
   const btn = document.getElementById("theme-toggle");
   if (btn) {
-    btn.textContent = theme === "dark" ? "☀️" : "🌙";
+    btn.textContent = theme === "dark" ? "Light" : "Dark";
     btn.setAttribute(
       "aria-label",
       theme === "dark" ? "Mode clair" : "Mode sombre",
@@ -3634,7 +4575,7 @@ function toggleTheme() {
 }
 
 function initTheme() {
-  const saved = localStorage.getItem("theme");
+  const saved = localStorage.getItem("theme") || getAvertGuardSettings().app?.theme;
   const def = window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
@@ -3668,8 +4609,161 @@ const KPI = {
 // DOMContentLoaded
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+function applyDashboardState(state) {
+  if (!state || !state.stats) return;
+  updateDashboardLiveCounters();
+  KPI.setWorkers(state.stats.workers_current ?? 0);
+  KPI.setModules(state.stats.active_modules ?? 0);
+
+  const metricMap = {
+    ppe: [["m1-map", (m) => `${m.avg_confidence || 0}%`], ["m1-fps", (m) => `${m.detections_24h || 0}`]],
+    posture: [["m2-acc", (m) => `${m.avg_confidence || 0}%`], ["m2-f1", (m) => `${m.positives_24h || 0}`]],
+    fatigue: [["m3-f1", (m) => `${m.avg_confidence || 0}%`], ["m3-lat", (m) => `${m.alerts_24h || 0}`]],
+    tracking: [["m4-idf1", (m) => `${m.avg_confidence || 0}%`], ["m4-count", (m) => `${m.positives_24h || 0}`]],
+    hazards: [["m5-iou", (m) => `${m.avg_confidence || 0}%`], ["m5-dice", (m) => `${m.positives_24h || 0}`]],
+    fire: [["m6-map", (m) => `${m.avg_confidence || 0}%`], ["m6-fp", (m) => `${m.alerts_24h || 0}`]],
+    proximity: [["m7-dist", () => (state.min_distance == null ? "-" : `${state.min_distance}`)], ["m7-alerts", (m) => `${m.alerts_24h || 0}`]],
+  };
+
+  Object.entries(state.modules || {}).forEach(([slug, moduleState]) => {
+    (metricMap[slug] || []).forEach(([id, formatter]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = formatter(moduleState);
+    });
+    const chip = document
+      .querySelector(`[data-module-card="${slug}"]`)
+      ?.querySelector(".module-status-chip");
+    if (chip) {
+      chip.textContent = moduleState.status_label || "ACTIF";
+      chip.classList.toggle("chip-active", moduleState.status === "active");
+      chip.classList.toggle("chip-pending", moduleState.status !== "active");
+    }
+  });
+
+  if (!dashboardHybridActive && !dashboardFallSpillActive) {
+    renderDashboardAlerts(state.recent_alerts || []);
+  }
+}
+
+function renderDashboardAlerts(alerts) {
+  const feed = document.getElementById("alerts-feed");
+  if (!feed) return;
+  if (!alerts.length) {
+    feed.innerHTML = `
+      <div class="empty-state" style="padding:40px 20px">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".3"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <p>Aucune alerte pour l'instant</p>
+      </div>`;
+    return;
+  }
+  feed.innerHTML = alerts
+    .map((alert) => {
+      const sev = alert.severity === "critical" ? "critical" : "warning";
+      return `
+        <div class="alert-item">
+          <div class="alert-severity sev-${sev}"></div>
+          <div class="alert-body">
+            <div class="alert-module">${escapeHTML(alert.module).toUpperCase()}</div>
+            <div class="alert-msg">${escapeHTML(alert.title || alert.description)}</div>
+            <div class="alert-time">${escapeHTML(alert.timestamp)}</div>
+          </div>
+        </div>`;
+    })
+    .join("");
+}
+
+async function refreshDashboardState() {
+  if (!document.getElementById("dashboard-state-data")) return;
+  try {
+    const res = await fetch("/api/dashboard-state/");
+    const data = await res.json();
+    if (data.status === "success") applyDashboardState(data.data);
+  } catch (err) {
+    console.error("[AVERT GUARD] dashboard state:", err);
+  }
+}
+
+function initDashboardState() {
+  const el = document.getElementById("dashboard-state-data");
+  if (!el) return;
+  try {
+    applyDashboardState(JSON.parse(el.textContent));
+  } catch (err) {
+    console.error("[AVERT GUARD] initial dashboard state:", err);
+  }
+  const refresh = Number(getAvertGuardSettings().dashboard?.refresh) || 5000;
+  setInterval(refreshDashboardState, refresh);
+}
+
+function readSettingsForm() {
+  const settings = getAvertGuardSettings();
+  document.querySelectorAll("[data-setting-key]").forEach((field) => {
+    const value =
+      field.type === "checkbox"
+        ? field.checked
+        : field.type === "number"
+          ? Number(field.value)
+          : field.value;
+    setDeepValue(settings, field.dataset.settingKey, value);
+  });
+  return settings;
+}
+
+function populateSettingsForm() {
+  const settings = getAvertGuardSettings();
+  document.querySelectorAll("[data-setting-key]").forEach((field) => {
+    const value = getDeepValue(settings, field.dataset.settingKey);
+    if (value === undefined) return;
+    if (field.type === "checkbox") field.checked = Boolean(value);
+    else field.value = value;
+  });
+}
+
+function initSettingsPage() {
+  if (!document.getElementById("settings-save-btn")) return;
+  populateSettingsForm();
+  document.getElementById("settings-save-btn")?.addEventListener("click", () => {
+    const settings = readSettingsForm();
+    saveAvertGuardSettings(settings);
+    applyTheme(settings.app?.theme || "dark");
+    applySettingsToCameraSelector();
+    showPopupNotification("Parametres AVERT GUARD sauvegardes", "info", false);
+  });
+  document.getElementById("settings-reset-btn")?.addEventListener("click", () => {
+    localStorage.removeItem(AVERT_GUARD_SETTINGS_KEY);
+    populateSettingsForm();
+    applyAvertGuardBranding();
+    applySettingsToCameraSelector();
+    showPopupNotification("Parametres restaures", "info", false);
+  });
+  document.querySelectorAll(".settings-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document
+        .querySelectorAll(".settings-tab")
+        .forEach((item) => item.classList.remove("active"));
+      tab.classList.add("active");
+    });
+  });
+}
+
+function initDashboardCardActions() {
+  document.querySelectorAll(".module-card .btn-ghost").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      window.location.href = "/settings/#models";
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  applyAvertGuardBranding();
+  applySettingsToCameraSelector();
   initTheme();
+  updateDashboardLiveCounters();
+  initDashboardState();
+  initSettingsPage();
+  initDashboardCardActions();
   document
     .getElementById("theme-toggle")
     ?.addEventListener("click", toggleTheme);

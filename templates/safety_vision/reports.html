@@ -1,7 +1,7 @@
 {% extends 'safety_vision/base.html' %}
 
-{% block title %}Rapport SafeVision AI{% endblock %}
-{% block page_title %}Rapport SafeVision AI{% endblock %}
+{% block title %}Rapport AVERT GUARD{% endblock %}
+{% block page_title %}Rapport AVERT GUARD{% endblock %}
 {% block page_subtitle %}Rapport dynamique des modules, modeles, detections et alertes{% endblock %}
 
 {% block content %}
@@ -635,13 +635,13 @@
   <section class="hero">
     <div class="hero-grid">
       <div>
-        <div class="hero-badge"><span class="pulse"></span>Soutenance SafeVision AI - Systeme actif</div>
+        <div class="hero-badge"><span class="pulse"></span>Soutenance AVERT GUARD - Systeme actif</div>
         <h1>Rapport complet<br><span>Surveillance industrielle intelligente</span></h1>
         <p>
           Synthese technique alimentee par la base Django : modules IA, poids de modeles presents,
           detections positives, alertes critiques, historique et exports. Les cartes ci-dessous sont
           construites depuis les vraies detections enregistrees par les API de chute, fatigue, EPI,
-          signalisation et risques environnementaux.
+          posture, panique, tracking, signalisation, proximite et risques environnementaux.
         </p>
         <div class="hero-btns">
           <button class="btn-primary" type="button" onclick="window.print()">Imprimer PDF</button>
@@ -754,6 +754,33 @@
             <rect x="133" y="105" width="54" height="13" rx="3" fill="#ff3b5c"/>
             <rect x="78" y="30" width="164" height="125" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
             <text x="84" y="24" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">SIGN - {{ card.confidence }}%</text>
+            {% elif card.visual == 'posture' %}
+            <rect width="320" height="180" fill="#10111f"/>
+            <line x1="160" y1="45" x2="150" y2="78" stroke="#8a93b3" stroke-width="5" stroke-linecap="round"/>
+            <line x1="150" y1="78" x2="188" y2="103" stroke="#8a93b3" stroke-width="5" stroke-linecap="round"/>
+            <line x1="150" y1="78" x2="118" y2="108" stroke="#8a93b3" stroke-width="5" stroke-linecap="round"/>
+            <line x1="188" y1="103" x2="210" y2="138" stroke="#8a93b3" stroke-width="5" stroke-linecap="round"/>
+            <line x1="118" y1="108" x2="92" y2="142" stroke="#8a93b3" stroke-width="5" stroke-linecap="round"/>
+            <circle cx="160" cy="39" r="14" fill="#8a93b3"/>
+            <rect x="82" y="27" width="144" height="126" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="88" y="21" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">POSTURE - {{ card.confidence }}%</text>
+            {% elif card.visual == 'panic' %}
+            <rect width="320" height="180" fill="#180b0e"/>
+            <circle cx="160" cy="78" r="44" fill="#ff3b2f" opacity=".18"/>
+            <path d="M160 36 L213 139 H107 Z" fill="none" stroke="{{ card.accent }}" stroke-width="5"/>
+            <rect x="153" y="70" width="14" height="42" rx="5" fill="{{ card.accent }}"/>
+            <circle cx="160" cy="128" r="7" fill="{{ card.accent }}"/>
+            <rect x="92" y="30" width="136" height="122" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="98" y="24" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">PANIC - {{ card.confidence }}%</text>
+            {% elif card.visual == 'worker_tracking' %}
+            <rect width="320" height="180" fill="#07131b"/>
+            <line x1="42" y1="132" x2="278" y2="92" stroke="#ff3b2f" stroke-width="3" stroke-dasharray="8 6"/>
+            <rect x="72" y="68" width="36" height="62" rx="4" fill="none" stroke="#4ae3b5" stroke-width="3"/>
+            <text x="76" y="62" fill="#4ae3b5" font-family="monospace" font-size="9" font-weight="700">ID 1</text>
+            <rect x="178" y="54" width="42" height="76" rx="4" fill="none" stroke="#00c2ff" stroke-width="3"/>
+            <text x="182" y="48" fill="#00c2ff" font-family="monospace" font-size="9" font-weight="700">ID 2</text>
+            <rect x="62" y="38" width="170" height="104" rx="4" fill="none" stroke="{{ card.accent }}" stroke-width="3" stroke-dasharray="8 5"/>
+            <text x="68" y="32" fill="{{ card.accent }}" font-family="monospace" font-size="10" font-weight="700">TRACKING - {{ card.confidence }}%</text>
             {% else %}
             <rect width="320" height="180" fill="#101522"/>
             <circle cx="160" cy="90" r="54" fill="{{ card.accent }}" opacity=".18"/>
@@ -782,7 +809,7 @@
         </div>
       </article>
       {% empty %}
-      <div class="block-body" style="grid-column:1/-1;color:var(--ink3)">Aucune detection positive enregistree pour generer les captures.</div>
+      <div class="block-body" style="grid-column:1/-1;color:var(--ink3)">Aucune detection enregistree pour generer les captures.</div>
       {% endfor %}
     </div>
   </section>
@@ -973,7 +1000,7 @@
       <h2>Argumentaire de soutenance</h2>
     </div>
     <div class="prof-box">
-      <p><strong>SafeVision AI</strong> n'est pas une simple maquette: la meme structure de donnees alimente le dashboard, les pages modules, les alertes, les tableaux temps reel et ce rapport. Chaque detection garde son module, son score de confiance, sa camera, son horodatage et ses details bruts.</p>
+      <p><strong>AVERT GUARD</strong> n'est pas une simple maquette: la meme structure de donnees alimente le dashboard, les pages modules, les alertes, les tableaux temps reel et ce rapport. Chaque detection garde son module, son score de confiance, sa camera, son horodatage et ses details bruts.</p>
       <p>La force du projet est sa modularite: chute, fatigue, EPI, signalisation, deversement, plaque ouverte et sortie bloquee restent dans des detecteurs Python separes, mais remontent vers une interface unique et exportable. C'est exactement ce qu'on attend d'une plateforme industrielle extensible.</p>
       <p>Pour la presentation, ouvrez ce rapport apres avoir lance quelques videos de test: les KPI, les captures, les alertes et les lignes de detection changent automatiquement avec les resultats reels des modeles.</p>
     </div>
@@ -996,10 +1023,10 @@
     const rows = getRows();
     const headers = ['module','stack','detections','events','alerts','critical','confidence','coverage','risk'];
     const body = rows.map(row => headers.map(key => `"${String(row[key] ?? '').replace(/"/g, '""')}"`).join(';'));
-    dl('safevision-rapport.csv', [headers.join(';'), ...body].join('\n'), 'text/csv;charset=utf-8');
+    dl('avert-guard-rapport.csv', [headers.join(';'), ...body].join('\n'), 'text/csv;charset=utf-8');
   }
   function exportJSON() {
-    dl('safevision-rapport.json', JSON.stringify(getRows(), null, 2), 'application/json;charset=utf-8');
+    dl('avert-guard-rapport.json', JSON.stringify(getRows(), null, 2), 'application/json;charset=utf-8');
   }
 </script>
 <section class="panel">

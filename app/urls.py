@@ -11,6 +11,7 @@ from .views import (
     UserLogoutView,
     SignUpView,
     api_test,
+    api_dashboard_state,
     api_module_events,
     api_clear_alerts,
     api_fall_detection,
@@ -52,6 +53,7 @@ urlpatterns = [
 
     # ── API — Tests ────────────────────────────────────────
     path('api/test/',           api_test,                       name='api_test'),
+    path('api/dashboard-state/', api_dashboard_state,            name='api_dashboard_state'),
     path('api/module-events/<slug:slug>/', api_module_events,   name='api_module_events'),
     path('api/alerts/clear/',   api_clear_alerts,               name='api_clear_alerts'),
 

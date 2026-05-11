@@ -157,6 +157,7 @@ MODULE_SLUG_TO_ID = {
 }
 
 MODULE_SLUG_ALIASES = {
+    'comportement': 'posture',
     'incapacity': 'fatigue',
     'falling': 'fatigue',
     'fall': 'fatigue',
@@ -471,6 +472,123 @@ def get_module_by_slug(slug):
 
 # ── Vues génériques ────────────────────────────────────────────────────────────
 
+def _dashboard_module_slug(module):
+    explicit = {
+        1: 'ppe',
+        2: 'posture',
+        3: 'fatigue',
+        4: 'tracking',
+        5: 'hazards',
+        6: 'fire',
+        7: 'proximity',
+        8: 'proximity',
+    }
+    if module.id in explicit:
+        return explicit[module.id]
+    name = (module.name or '').lower()
+    if 'posture' in name or 'comportement' in name:
+        return 'posture'
+    if 'fatigue' in name or 'chute' in name:
+        return 'fatigue'
+    if 'tracking' in name or 'objet' in name:
+        return 'tracking'
+    if 'feu' in name or 'fire' in name or 'fum' in name:
+        return 'fire'
+    if 'proxim' in name or 'machine' in name:
+        return 'proximity'
+    if 'risque' in name or 'hazard' in name or 'spill' in name:
+        return 'hazards'
+    if 'epi' in name or 'ppe' in name or 'signal' in name:
+        return 'ppe'
+    return f'module-{module.id}'
+
+
+def _dashboard_workers_count():
+    for det in Detection.objects.order_by('-timestamp')[:300]:
+        details = det.details or {}
+        if 'worker_tracking_detected' in details:
+            tracks = details.get('tracks') or []
+            return max(
+                len(tracks) if isinstance(tracks, list) else 0,
+                int(details.get('crossed_count') or 0),
+                int(details.get('count_in') or 0),
+                int(details.get('workers_count') or 0),
+            )
+        if 'workers_count' in details:
+            return int(details.get('workers_count') or 0)
+    return 0
+
+
+def _dashboard_min_distance():
+    for det in Detection.objects.order_by('-timestamp')[:300]:
+        details = det.details or {}
+        logs = details.get('incident_logs') or details.get('incidents') or []
+        if isinstance(logs, list):
+            distances = [
+                item.get('distance_m')
+                for item in logs
+                if isinstance(item, dict) and item.get('distance_m') is not None
+            ]
+            if distances:
+                return round(min(float(value) for value in distances), 1)
+    return None
+
+
+def build_dashboard_state():
+    since = timezone.now() - timedelta(hours=24)
+    modules = list(Module.objects.order_by('id'))
+    alerts_24 = Alert.objects.filter(timestamp__gte=since)
+    detections_24 = Detection.objects.filter(timestamp__gte=since)
+    total_modules = max(len(modules), 8)
+    active_modules = sum(1 for module in modules if module.status == 'active')
+
+    module_payload = {}
+    for module in modules:
+        slug = _dashboard_module_slug(module)
+        module_detections = module.detections.filter(timestamp__gte=since)
+        module_alerts = module.alerts.filter(timestamp__gte=since)
+        total = module_detections.count()
+        positives = module_detections.filter(count__gt=0).count()
+        avg_conf = module_detections.aggregate(value=Avg('confidence'))['value'] or 0
+        last_detection = module_detections.order_by('-timestamp').values_list('timestamp', flat=True).first()
+        module_payload[slug] = {
+            'id': module.id,
+            'name': module.name,
+            'status': module.status,
+            'status_label': 'ACTIF' if module.status == 'active' else module.status.upper(),
+            'detections_24h': total,
+            'positives_24h': positives,
+            'alerts_24h': module_alerts.count(),
+            'avg_confidence': int(avg_conf * 100),
+            'last_detection': last_detection.isoformat() if last_detection else None,
+        }
+
+    recent_alerts = []
+    for alert in Alert.objects.select_related('module').order_by('-timestamp')[:8]:
+        recent_alerts.append({
+            'severity': alert.severity,
+            'module': alert.module.name if alert.module else 'Systeme',
+            'title': alert.title,
+            'description': alert.description,
+            'timestamp': alert.timestamp.strftime('%H:%M:%S'),
+        })
+
+    return {
+        'stats': {
+            'critical_24h': alerts_24.filter(severity='critical').count(),
+            'warnings_24h': alerts_24.exclude(severity='critical').count(),
+            'workers_current': _dashboard_workers_count(),
+            'active_modules': active_modules,
+            'total_modules': total_modules,
+            'detections_24h': detections_24.count(),
+        },
+        'modules': module_payload,
+        'recent_alerts': recent_alerts,
+        'min_distance': _dashboard_min_distance(),
+        'generated_at': timezone.now().isoformat(),
+    }
+
+
 class IndexView(TemplateView):
     template_name = 'index.html'
 
@@ -485,11 +603,13 @@ class SafetyDashboardView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['app_name']        = 'SafeVision Dashboard'
+        dashboard_state = build_dashboard_state()
+        context['app_name']        = 'AVERT GUARD Dashboard'
         context['modules']         = Module.objects.all()
         context['alerts']          = Alert.objects.order_by('-timestamp')[:5]
-        context['active_modules']  = Module.objects.filter(status='active').count()
-        context['critical_alerts'] = Alert.objects.filter(severity='critical').count()
+        context['active_modules']  = dashboard_state['stats']['active_modules']
+        context['critical_alerts'] = dashboard_state['stats']['critical_24h']
+        context['dashboard_state'] = dashboard_state
         return context
 
 
@@ -508,7 +628,7 @@ class AlertsView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['app_name'] = 'Alertes SafeVision'
+        context['app_name'] = 'Alertes AVERT GUARD'
         context['alerts']   = Alert.objects.order_by('-timestamp')[:25]
         context['modules']  = Module.objects.all()
         return context
@@ -519,7 +639,7 @@ class SettingsView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['app_name'] = 'Paramètres SafeVision'
+        context['app_name'] = 'Parametres AVERT GUARD'
         context['cameras']  = [
             {'name': 'Caméra principale', 'status': 'Active',  'location': 'Hall 1'},
             {'name': 'Caméra de chantier','status': 'Active',  'location': 'Zone A'},
@@ -549,12 +669,12 @@ class ReportsView(TemplateView):
             'slug': 'posture',
             'short_name': 'Posture & Comportement',
             'axis': 'Axe 2 + 12',
-            'stack': 'Analyse posture / squelette',
-            'goal': 'Identifier les postures dangereuses et les comportements anormaux.',
-            'cameras': ['Camera posture - source configurable'],
-            'model_files': [],
-            'pipeline': ['Extraction frame', 'Analyse posture', 'Score risque ergonomique', 'Rapport comportement'],
-            'strengths': ['Vision ergonomique', 'Interpretation metier', 'Extensible a MediaPipe'],
+            'stack': 'Analyse posture + PPE',
+            'goal': 'Identifier les postures dangereuses, comportements anormaux et violations EPI sur posture.mp4.',
+            'cameras': ['CAM 9 - posture.mp4', 'CAM 10 - panic.mp4'],
+            'model_files': ['ppe.pt'],
+            'pipeline': ['Extraction frame', 'Analyse posture', 'Detection EPI PPE', 'Score risque ergonomique', 'Rapport comportement'],
+            'strengths': ['Vision ergonomique', 'Controle PPE sur posture.mp4', 'Interpretation metier'],
             'impact': 'Prevention des accidents musculaires et des gestes dangereux.',
             'accent': '#7B61FF',
         },
@@ -577,8 +697,8 @@ class ReportsView(TemplateView):
             'axis': 'Axes 6 + 11',
             'stack': 'Tracking multi-objets',
             'goal': 'Suivre presence, objets tombants, mouvements et occupation des zones.',
-            'cameras': ['Camera zone production - source configurable'],
-            'model_files': [],
+            'cameras': ['CAM 8 - tracking_workers.mp4'],
+            'model_files': ['peopleNet.pt'],
             'pipeline': ['Detection personne/objet', 'Association ID', 'Trajectoires', 'Comptage zone'],
             'strengths': ['Historique trajectoire', 'Vision supervision', 'Pret pour DeepSORT/ByteTrack'],
             'impact': 'Meilleure lecture des flux travailleurs et objets dangereux.',
@@ -617,7 +737,7 @@ class ReportsView(TemplateView):
             'stack': 'YOLO proximite homme-machine',
             'goal': 'Detecter distance dangereuse entre travailleur et machine.',
             'cameras': ['CAM 8 - proximite configurable'],
-            'model_files': [],
+            'model_files': ['proximity_detection.pt'],
             'pipeline': ['Detection worker/machine', 'Calcul distance relative', 'Seuil risque', 'Alerte proximite'],
             'strengths': ['Alerte collision', 'Visualisation distance', 'Adaptable aux machines chantier'],
             'impact': 'Prevention des collisions et zones d ecrasement.',
@@ -638,6 +758,11 @@ class ReportsView(TemplateView):
             ('ppe_violation', 'Violation EPI'),
             ('sign_defect_detected', 'Signalisation'),
             ('proximity_detected', 'Proximite'),
+            ('posture_detected', 'Posture'),
+            ('posture_unsafe', 'Posture'),
+            ('unsafe_posture_detected', 'Posture'),
+            ('panic_detected', 'Panique'),
+            ('worker_tracking_detected', 'Worker Tracking'),
             ('fire_detected', 'Feu/Fumee'),
             ('smoke_detected', 'Feu/Fumee'),
         ]
@@ -663,6 +788,12 @@ class ReportsView(TemplateView):
             return 'sign'
         if 'proximity_detected' in details or (module and module.id == 7):
             return 'proximity'
+        if 'posture_detected' in details or 'posture_unsafe' in details or 'unsafe_posture_detected' in details:
+            return 'posture'
+        if 'panic_detected' in details:
+            return 'panic'
+        if 'worker_tracking_detected' in details:
+            return 'worker_tracking'
         if 'fire_detected' in details or 'smoke_detected' in details:
             return 'fire'
         return 'generic'
@@ -675,6 +806,7 @@ class ReportsView(TemplateView):
         camera = str(details.get('camera') or details.get('source') or f'Module {det.module_id}').upper()
         bbox = details.get('bbox') or details.get('exit_bbox')
         detections = details.get('detections') or details.get('model_detections') or []
+        is_positive = bool(det.count and det.count > 0)
 
         title_map = {
             'fall': 'Chute detectee',
@@ -685,7 +817,25 @@ class ReportsView(TemplateView):
             'ppe': 'Violation EPI detectee',
             'sign': 'Signalisation defectueuse',
             'proximity': 'Proximite machine',
+            'posture': 'Posture dangereuse detectee',
+            'panic': 'Panique detectee',
+            'worker_tracking': 'Worker tracking detecte',
             'fire': 'Feu/Fumee detecte',
+            'generic': kind,
+        }
+        neutral_title_map = {
+            'fall': 'Analyse chute enregistree',
+            'fatigue': 'Analyse fatigue enregistree',
+            'spill': 'Analyse deversement enregistree',
+            'manhole': 'Analyse plaque enregistree',
+            'exit': 'Analyse issue de secours enregistree',
+            'ppe': 'Controle EPI enregistre',
+            'sign': 'Analyse signalisation enregistree',
+            'proximity': 'Controle proximite enregistre',
+            'posture': 'Posture controlee sur posture.mp4',
+            'panic': 'Analyse panique enregistree',
+            'worker_tracking': 'Tracking workers enregistre',
+            'fire': 'Analyse feu/fumee enregistree',
             'generic': kind,
         }
         stack_map = {
@@ -697,8 +847,11 @@ class ReportsView(TemplateView):
             'ppe': 'YOLO PPE ppe.pt',
             'sign': 'ResNet50 signalisation',
             'proximity': 'Detection proximite',
+            'posture': 'Posture + PPE sur posture.mp4',
+            'panic': 'BiLSTM panic detection',
+            'worker_tracking': 'peopleNet + tracking workers',
             'fire': 'YOLO fire_smoke_detection.pt',
-            'generic': 'Analyse SafeVision',
+            'generic': 'Analyse AVERT GUARD',
         }
         accent_map = {
             'fall': '#FF3B2F',
@@ -709,6 +862,9 @@ class ReportsView(TemplateView):
             'ppe': '#4AE3B5',
             'sign': '#7B61FF',
             'proximity': '#E040FB',
+            'posture': '#7B61FF',
+            'panic': '#FF3B2F',
+            'worker_tracking': '#00C2FF',
             'fire': '#FF3B2F',
             'generic': '#2979FF',
         }
@@ -740,6 +896,19 @@ class ReportsView(TemplateView):
             badges = ['EXIT', 'Obstacle', f"{int(details.get('confidence', det.confidence or 0) * 100)}%"]
         elif visual == 'proximity':
             badges = ['Machine', 'Distance critique']
+        elif visual == 'posture':
+            posture = details.get('posture', 'unsafe' if details.get('posture_detected') else 'safe')
+            reasons = details.get('reasons', [])
+            badges = ['POSTURE', str(posture).upper()] + reasons[:1]
+        elif visual == 'panic':
+            label = details.get('label') or ('DETECTED' if is_positive else 'NORMAL')
+            badges = ['PANIC', label, f"P={int((details.get('p_panic', 0)) * 100)}%"]
+        elif visual == 'worker_tracking':
+            badges = [
+                'TRACKING',
+                f"IN {details.get('count_in', 0)}",
+                f"OUT {details.get('count_out', 0)}",
+            ]
         elif visual == 'fire':
             if details.get('fire_detected'):
                 badges = ['FIRE', f"{int((details.get('confidence', det.confidence or 0)) * 100)}%"]
@@ -755,11 +924,12 @@ class ReportsView(TemplateView):
             'module': det.module.name,
             'kind': kind,
             'visual': visual,
-            'title': title_map.get(visual, kind),
+            'title': (title_map if is_positive else neutral_title_map).get(visual, kind),
+            'status': 'DANGER' if is_positive else 'OK',
             'camera': camera,
             'confidence': confidence,
             'timestamp': det.timestamp,
-            'stack': stack_map.get(visual, 'Analyse SafeVision'),
+            'stack': stack_map.get(visual, 'Analyse AVERT GUARD'),
             'accent': accent_map.get(visual, '#2979FF'),
             'bbox': bbox,
             'detections_count': len(detections),
@@ -845,14 +1015,27 @@ class ReportsView(TemplateView):
 
         capture_cards = []
         captured_visuals = set()
-        for det in detections.filter(count__gt=0)[:800]:
+
+        def add_capture_card(det, include_neutral=False):
             visual = self._capture_visual(det.details or {}, det.module)
             if visual in captured_visuals:
-                continue
+                return False
+            if not include_neutral and not det.count:
+                return False
             capture_cards.append(self._capture_card(det))
             captured_visuals.add(visual)
-            if len(capture_cards) >= 8:
+            return True
+
+        for det in detections.filter(count__gt=0)[:800]:
+            add_capture_card(det)
+            if len(capture_cards) >= 12:
                 break
+
+        if len(capture_cards) < 12:
+            for det in detections[:800]:
+                add_capture_card(det, include_neutral=True)
+                if len(capture_cards) >= 12:
+                    break
 
         recent_detections = []
         for det in detections[:25]:
@@ -883,7 +1066,7 @@ class ReportsView(TemplateView):
         ]
 
         context.update({
-            'app_name': 'Rapports SafeVision',
+            'app_name': 'Rapports AVERT GUARD',
             'modules': modules,
             'alerts': alerts[:12],
             'module_reports': module_reports,
@@ -924,7 +1107,7 @@ class ModuleDetailView(TemplateView):
             is_ppe_violation = 'ppe_violation' in details
             is_sign_defect = 'sign_defect_detected' in details or 'is_defective' in details
             is_proximity = 'proximity_detected' in details
-            is_posture = 'posture_unsafe' in details
+            is_posture = 'posture_unsafe' in details or 'posture_detected' in details or 'unsafe_posture_detected' in details
             is_panic = 'panic_detected' in details
             is_worker_tracking = 'worker_tracking_detected' in details
             is_fire = 'fire_detected' in details or 'smoke_detected' in details
@@ -1195,7 +1378,7 @@ def _notify_fall_sms(alert, camera, confidence, capture_meta):
     capture_url = capture_meta.get('capture_url')
     public_capture_url = _public_media_url(capture_url)
     message = (
-        f"ALERTE CHUTE SafeVision: chute detectee sur {str(camera).upper()} "
+        f"ALERTE CHUTE AVERT GUARD: chute detectee sur {str(camera).upper()} "
         f"(confiance {confidence:.0%})."
     )
     if public_capture_url:
@@ -1272,7 +1455,7 @@ def _detection_to_event(det):
     is_ppe_violation = 'ppe_violation' in details
     is_sign_defect = 'sign_defect_detected' in details or 'is_defective' in details
     is_proximity = 'proximity_detected' in details
-    is_posture = 'posture_unsafe' in details
+    is_posture = 'posture_unsafe' in details or 'posture_detected' in details or 'unsafe_posture_detected' in details
     is_panic = 'panic_detected' in details
     is_worker_tracking = 'worker_tracking_detected' in details
     is_fire = 'fire_detected' in details or 'smoke_detected' in details
@@ -1339,6 +1522,12 @@ def api_test(request):
 
 
 # ── /api/fall-detection/ ──────────────────────────────────────────────────────
+
+def api_dashboard_state(request):
+    if request.method != 'GET':
+        return JsonResponse({'status': 'error', 'message': 'Methode non autorisee'}, status=405)
+    return JsonResponse({'status': 'success', 'data': build_dashboard_state()})
+
 
 def api_module_events(request, slug):
     module = get_module_by_slug(slug)
@@ -1811,6 +2000,7 @@ def api_proximity_detection(request):
             'details'           : {
                 'workers_count'  : details.get('workers_count', 0),
                 'machines_count' : details.get('machines_count', 0),
+                'detections'     : details.get('detections', [])[:30],
                 'severity'       : top,
                 'incidents_count': len(incidents),
                 'incident_logs'  : incidents,
@@ -1901,6 +2091,7 @@ def api_proximity_detection(request):
             'details'           : {
                 'workers_count' : details.get('workers_count', 0),
                 'machines_count': details.get('machines_count', 0),
+                'detections'    : details.get('detections', [])[:30],
                 'severity'      : top,
                 'incidents_count': len(incidents),
                 'incident_logs' : incidents,
@@ -2561,7 +2752,7 @@ def api_panic_detection(request):
 # ── /api/chat/ ──────────────────────────────────────────────────────────────
 @csrf_exempt
 def api_chat(request):
-    """API endpoint pour le chatbot SafeBot (OpenRouter)."""
+    """API endpoint pour le chatbot AvertBot (OpenRouter)."""
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
 
@@ -2584,11 +2775,11 @@ def api_chat(request):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "http://127.0.0.1:8000",
-            "X-Title": "SafeVision AI"
+            "X-Title": "AVERT GUARD"
         }
         
         system_prompt = """
-        Tu es SafeBot, un assistant expert en santé et sécurité au travail, spécifiquement en Tunisie. 
+        Tu es AvertBot, un assistant expert en sante et securite au travail, specifiquement en Tunisie. 
         Tu connais parfaitement le Code du Travail tunisien, les normes de la CNAMPH, et les réglementations de l'INORPI.
         Tu réponds de manière professionnelle, claire et concise. Si on te pose une question hors sujet, 
         rappelle poliment que tu es spécialisé dans la sécurité au travail en Tunisie.
@@ -2611,7 +2802,7 @@ def api_chat(request):
         return JsonResponse({'status': 'success', 'reply': bot_reply})
 
     except requests.exceptions.RequestException as e:
-        print(f"[SafeBot] OpenRouter API Error: {e}")
+        print(f"[AvertBot] OpenRouter API Error: {e}")
         return JsonResponse({'status': 'error', 'message': 'Erreur de connexion à l\'IA'}, status=500)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'Erreur interne : {e}'}, status=500)

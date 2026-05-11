@@ -1,5 +1,5 @@
 {% extends "safety_vision/base.html" %} {% block title %}{{ page_title }} —
-SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
+AVERT GUARD{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
 {% block page_subtitle %}{{ page_subtitle }}{% endblock %} {% block content %}
 
 <div style="display: flex; gap: 10px; margin-bottom: 16px; align-items: center">
@@ -164,6 +164,11 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
                   id="cam9-posture-status"
                   >Détection: en attente…</span
                 >
+                <span
+                  style="font-size: 10px; font-family: var(--font-mono)"
+                  id="cam9-ppe-status"
+                  >PPE: en attente…</span
+                >
               </div>
             </div>
           </div>
@@ -212,6 +217,16 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
                 padding: 2px 6px;
               "
               >UNSAFE</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #4ae3b5;
+                --chip-rgb: 74, 227, 181;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >PPE</span
             >
           </div>
         </div>
@@ -605,6 +620,7 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
     lastAlertId: MODULE_BASE_ALERT_ID,
     seenDetectionIds: new Set(),
     seenAlertIds: new Set(),
+    liveLastAt: {},
   };
 
   function escapeHtml(value) {
@@ -777,6 +793,26 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
   window.onDetectionResult = function onDetectionResult(result) {
     moduleRuntimeState.lastResult = result;
     document.getElementById("model-loaded-status").textContent = "Actif";
+    if (
+      ["posture", "comportement"].includes(MODULE_SLUG) &&
+      result?.cam === "cam9" &&
+      result?.type === "ppe_violation" &&
+      result.detected
+    ) {
+      const key = `${result.cam}-${result.type}`;
+      const now = Date.now();
+      if (now - (moduleRuntimeState.liveLastAt[key] || 0) > 4000) {
+        moduleRuntimeState.liveLastAt[key] = now;
+        addDetectionRow({ ...result, time: formatTime() });
+        addModuleAlert({
+          ...result,
+          alertKey: `live-${key}-${now}`,
+          message: "Violation EPI detectee sur posture.mp4",
+          severity: "warning",
+          time: formatTime(),
+        });
+      }
+    }
   };
 
   function resetLivePanels() {
@@ -795,6 +831,7 @@ SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
     moduleRuntimeState.lastAlertId = baselineAlertId;
     moduleRuntimeState.seenDetectionIds = new Set();
     moduleRuntimeState.seenAlertIds = new Set();
+    moduleRuntimeState.liveLastAt = {};
     updateDetectionCount();
     document.getElementById("detections-tbody").innerHTML = `
     <tr class="empty-state-row">

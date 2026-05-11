@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}SafeVision AI{% endblock %}</title>
+  <title>{% block title %}AVERT GUARD{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
@@ -15,16 +15,9 @@
 
   <!-- SIDEBAR NAV -->
   <aside class="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-          <polygon points="16,2 30,26 2,26" stroke="#FF3B2F" stroke-width="2" fill="none"/>
-          <circle cx="16" cy="18" r="3" fill="#FF3B2F"/>
-          <line x1="16" y1="10" x2="16" y2="15" stroke="#FF3B2F" stroke-width="2"/>
-        </svg>
-      </div>
-      <span class="logo-text">SAFE<span class="accent">VISION</span></span>
-    </div>
+    <a class="sidebar-logo text-only" href="/dashboard/" aria-label="AVERT GUARD Dashboard">
+      <span class="logo-text">AVERT <span class="accent">GUARD</span></span>
+    </a>
 
     <nav class="sidebar-nav">
       <div class="nav-section-label">SURVEILLANCE</div>
@@ -111,17 +104,20 @@
       </div>
       <div class="topbar-right">
         <div class="time-display" id="live-clock"></div>
-        <button id="theme-toggle" class="theme-btn" type="button" aria-label="Basculer mode sombre/clair">🌙</button>
+        <button id="theme-toggle" class="theme-btn" type="button" aria-label="Basculer mode sombre/clair">☀</button>
         <div class="camera-selector">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
           <select id="camera-select">
-            <option>Caméra 1 — Zone A</option>
-            <option>Caméra 2 — Zone B</option>
-            <option>Caméra 3 — Entrée</option>
-            <option>Fichier vidéo...</option>
+            <option value="dashboard-ppe-spill" data-source="/media/ppe_spill.mp4" data-label="ppe_spill.mp4">CAM 4 - PPE + Spill</option>
+            <option value="dashboard-spill-fall" data-source="/media/spill_fall.mp4" data-label="spill_fall.mp4">CAM 3 - Chute + Spill</option>
+            <option value="dashboard-posture" data-source="/media/posture.mp4" data-label="posture.mp4">CAM 9 - Posture + PPE</option>
+            <option value="dashboard-tracking" data-source="/media/tracking_workers.mp4" data-label="tracking_workers.mp4">CAM 8 - Tracking</option>
+            <option value="dashboard-signs" data-source="/media/signs_machine.mp4" data-label="signs_machine.mp4">CAM 7 - Signs + Machine</option>
+            <option value="dashboard-fire" data-source="/media/fire_machine.mp4" data-label="fire_machine.mp4">CAM 12 - Fire + Machine</option>
+            <option value="upload">Fichier video...</option>
           </select>
         </div>
-        <button class="btn-upload" onclick="document.getElementById('video-upload').click()">
+        <button class="btn-upload" type="button" onclick="document.getElementById('video-upload').click()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Charger Vidéo
         </button>
@@ -134,7 +130,7 @@
     </div>
   </main>
 
-  <script src="{% static 'js/main.js' %}?v=20260501-fatigue-fall-logic"></script>
+  <script src="{% static 'js/main.js' %}?v=20260511-live-notifications"></script>
   {% block extra_js %}{% endblock %}
 
   <!-- ━━━ CHATBOT UI ━━━ -->
@@ -149,7 +145,7 @@
       <div style="display:flex; align-items:center; gap:8px">
         <span style="font-size:16px">🛡️</span>
         <div>
-          <div style="font-weight:700; font-size:13px">SafeBot</div>
+          <div style="font-weight:700; font-size:13px">AvertBot</div>
           <div style="font-size:9px; opacity:0.8; font-family:var(--font-mono)">Assistant Sécurité TN</div>
         </div>
       </div>
@@ -158,7 +154,7 @@
     
     <div id="chatbot-messages" class="chatbot-messages">
       <div class="chat-message bot">
-        Bonjour ! Je suis SafeBot, votre expert en réglementation de sécurité au travail en Tunisie. Comment puis-je vous aider ?
+        Bonjour ! Je suis AvertBot, votre expert en reglementation de securite au travail en Tunisie. Comment puis-je vous aider ?
       </div>
     </div>
 

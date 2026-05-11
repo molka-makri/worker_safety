@@ -69,12 +69,12 @@ async function sendChatMessage() {
     } else {
       // On affiche le VRAI message d'erreur de Django pour pouvoir débugger
       addMessage("ERREUR TECHNIQUE : " + (data.message || 'Erreur inconnue'), 'bot');
-      console.error('[SafeBot] Error:', data.message);
+      console.error('[AvertBot] Error:', data.message);
     }
   } catch (err) {
     removeTyping();
     addMessage("Erreur de connexion au serveur.", 'bot');
-    console.error('[SafeBot] Fetch error:', err);
+    console.error('[AvertBot] Fetch error:', err);
   }
 }
 
