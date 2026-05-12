@@ -25,6 +25,13 @@ from PIL import Image
 from decouple import config
 import requests
 from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth.models import User
+
 
 SMS_EVENT_CACHE = {}
 HF_MEDIA_DATASET_BASE = "https://huggingface.co/datasets/molka8/worker_safety_media/resolve/main"
@@ -2153,7 +2160,7 @@ def api_fatigue_detection_batch(request):
 
 # ── /api/proximity-detection/ ─────────────────────────────────────────────────
 
-
+@csrf_exempt
 def api_ppe_detection(request):
     from .ppe_detector import detect_ppe_in_frame
     if request.method != "POST":
@@ -3458,3 +3465,49 @@ def api_chat(request):
         return JsonResponse(
             {"status": "error", "message": f"Erreur interne : {e}"}, status=500
         )
+
+
+
+@csrf_exempt
+def api_daily_report(request):
+    """API endpoint pour le rapport quotidien du bot Telegram."""
+    if request.method != 'GET':
+        return JsonResponse({'status': 'error', 'message': 'Méthode non autorisée'}, status=405)
+
+    try:
+        today = timezone.now().date()
+        alerts_today = Alert.objects.filter(timestamp__date=today)
+        
+        critical_count = alerts_today.filter(severity='critical').count()
+        warning_count = alerts_today.filter(severity='warning').count()
+        total_count = alerts_today.count()
+        
+        last_alerts = alerts_today.order_by('-timestamp')[:5]
+        alert_texts = [f"- {a.title} ({a.timestamp.strftime('%H:%M')})" for a in last_alerts]
+        
+        return JsonResponse({
+            'status': 'success',
+            'total_alerts': total_count,
+            'critical': critical_count,
+            'warning': warning_count,
+            'last_alerts': alert_texts,
+            'date': str(today)
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'Erreur : {e}'}, status=500)
+    
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def api_register(request):
+    username = request.data.get('username')
+    email = request.data.get('email')
+    password = request.data.get('password')
+    if not username or not password:
+        return Response({'error': 'Please provide both username and password'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
+    # Create the user
+    user = User.objects.create_user(username=username, email=email, password=password)
+    user.save()
+    return Response({'message': 'User created successfully!'}, status=status.HTTP_201_CREATED)

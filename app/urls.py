@@ -1,4 +1,5 @@
 from django.urls import path
+from .views import api_register
 from .views import (
     IndexView,
     SafetyDashboardView,
@@ -10,6 +11,7 @@ from .views import (
     UserLoginView,
     UserLogoutView,
     SignUpView,
+    api_daily_report,
     api_test,
     api_module_events,
     api_clear_alerts,
@@ -87,4 +89,6 @@ urlpatterns = [
     path('api/worker-tracking-detection/', api_worker_tracking_detection, name='api_worker_tracking_detection'),
     path('api/chat/', api_chat, name='api_chat'),
     path('hf-media/<path:asset_path>/', hf_media_proxy, name='hf_media_proxy'),
+    path('api/daily-report/', api_daily_report, name='api_daily_report'),
+     path('api/register/', api_register, name='api_register'),
 ]
