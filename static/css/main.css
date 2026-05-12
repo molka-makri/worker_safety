@@ -97,6 +97,7 @@ html, body {
   flex-direction: column;
   z-index: 100;
   overflow-y: auto;
+  transition: transform 0.22s ease, width 0.22s ease;
 }
 
 .main-content {
@@ -105,6 +106,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: margin-left 0.22s ease;
 }
 
 .content-area {
@@ -120,6 +122,53 @@ html, body {
   gap: 10px;
   padding: 20px 18px;
   border-bottom: 1px solid var(--bg-border);
+}
+
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--bg-border);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+}
+.sidebar-toggle:hover {
+  background: var(--bg-hover);
+}
+.sidebar-toggle-icon {
+  transition: transform 0.22s ease;
+}
+.sidebar #sidebar-toggle {
+  position: absolute;
+  top: 18px;
+  right: -16px;
+  z-index: 3;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+}
+.topbar-toggle {
+  display: none;
+  margin-right: 10px;
+}
+
+body.sidebar-collapsed .sidebar {
+  transform: translateX(calc(-1 * var(--sidebar-w)));
+}
+body.sidebar-collapsed .main-content {
+  margin-left: 0;
+}
+body.sidebar-collapsed .sidebar-toggle-icon {
+  transform: rotate(180deg);
+}
+body.sidebar-collapsed .topbar-toggle .sidebar-toggle-icon {
+  transform: rotate(180deg);
+}
+body.sidebar-collapsed .topbar-toggle {
+  display: inline-flex;
 }
 
 .logo-text {

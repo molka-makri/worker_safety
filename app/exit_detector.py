@@ -4,11 +4,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+from app.hf_model_store import ensure_model_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EXIT_MODEL_PATH = os.path.abspath(
-    os.path.join(BASE_DIR, "..", "models", "exit_emergency.pth")
-)
+EXIT_MODEL_PATH = ensure_model_file("exit_emergency.pth")
+DEBUG_EXIT_DETECTOR = os.getenv("DEBUG_EXIT_DETECTOR", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 # ── FIXED class mapping ───────────────────────────────────────────────────────
 # Your COCO annotations use:
@@ -156,10 +156,11 @@ class ExitBlockedDetector:
             label = CLASS_NAMES.get(cls_id, f"class_{cls_id}")
 
             # Debug line — visible in Django terminal
-            print(
-                f"[ExitDetector] raw: cls={cls_id} label={label} "
-                f"score={score:.3f}  (threshold={CONF_THRESHOLD})"
-            )
+            if DEBUG_EXIT_DETECTOR:
+                print(
+                    f"[ExitDetector] raw: cls={cls_id} label={label} "
+                    f"score={score:.3f}  (threshold={CONF_THRESHOLD})"
+                )
 
             if score < CONF_THRESHOLD:
                 continue
@@ -178,10 +179,11 @@ class ExitBlockedDetector:
             elif label == "obstacle":
                 obstacles.append(payload)
 
-        print(
-            f"[ExitDetector] exits={len(exits)}  obstacles={len(obstacles)}  "
-            f"total_raw={len(list(zip(boxes, labels, scores)))}"
-        )
+        if DEBUG_EXIT_DETECTOR:
+            print(
+                f"[ExitDetector] exits={len(exits)}  obstacles={len(obstacles)}  "
+                f"total_raw={len(list(zip(boxes, labels, scores)))}"
+            )
 
         if not exits:
             d = self._empty_details()
@@ -208,10 +210,11 @@ class ExitBlockedDetector:
                 distance = _edge_distance(exit_box, obs_box)
                 in_zone = _boxes_intersect(search_box, obs_box)
 
-                print(
-                    f"[ExitDetector]   dist exit→obstacle: {distance:.1f}px  "
-                    f"threshold: {threshold:.1f}px  in_zone={in_zone}"
-                )
+                if DEBUG_EXIT_DETECTOR:
+                    print(
+                        f"[ExitDetector]   dist exit→obstacle: {distance:.1f}px  "
+                        f"threshold: {threshold:.1f}px  in_zone={in_zone}"
+                    )
 
                 if distance <= threshold or in_zone:
                     if nearest_obs is None or distance < nearest_dist:

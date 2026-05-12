@@ -1,8 +1,6 @@
-{% extends "safety_vision/base.html" %}
-{% block title %}{{ page_title }} — SafeVision AI{% endblock %}
-{% block page_title %}{{ page_title }}{% endblock %}
-{% block page_subtitle %}{{ page_subtitle }}{% endblock %}
-{% block content %}
+{% extends "safety_vision/base.html" %} {% block title %}{{ page_title }} —
+SafeVision AI{% endblock %} {% block page_title %}{{ page_title }}{% endblock %}
+{% block page_subtitle %}{{ page_subtitle }}{% endblock %} {% block content %}
 
 <div style="display: flex; gap: 10px; margin-bottom: 16px; align-items: center">
   <button class="btn-control primary" onclick="runModel()">
@@ -38,55 +36,34 @@
         <span class="panel-title">Flux Vidéo — Analyse en cours</span>
       </div>
 
-      {% if module_cameras %}
-      <div class="live-grid" id="live-grid" style="padding:12px; gap:10px">
-        {% for camera in module_cameras %}
-        <div class="cam-tile" id="cam-tile-{{ camera.id }}">
+      {% if module_slug == 'proximity' or module_slug == 'machinery' %}
+      <div class="live-grid" id="live-grid" style="padding: 12px; gap: 10px">
+        <!-- CAM 11 — Proximité Homme-Machine -->
+        <div class="cam-tile" id="cam-tile-11">
           <div class="cam-header">
             <div class="status-dot active"></div>
-            <span>{{ camera.name }}</span>
-          </div>
-          <div class="cam-feed">
-            <video id="cam{{ camera.id }}-video" class="cam-video" src="{{ camera.source }}" muted loop playsinline preload="auto"></video>
-            <canvas id="cam{{ camera.id }}-overlay-canvas" class="cam-overlay-canvas"></canvas>
-            <div class="cam-video-overlay" id="cam{{ camera.id }}-video-overlay">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-                <span style="font-size:10px; font-family:var(--font-mono);">Fichier: {{ camera.file_label }}</span>
-                <span style="font-size:10px; font-family:var(--font-mono);" id="{{ camera.status_id }}">Detection: en attente...</span>
-              </div>
-            </div>
-          </div>
-          <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
-            <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
-            {% for chip in camera.chips %}
-            <span class="toggle-chip on" style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px">{{ chip.label }}</span>
-            {% endfor %}
-            {% if camera.secondary_status_id %}
-            <span style="font-size:10px; font-family:var(--font-mono); margin-left:auto" id="{{ camera.secondary_status_id }}">Detection: en attente...</span>
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% elif module_slug == 'fatigue' or module_slug == 'fall' or module_slug == 'falling' %}
-      <div class="live-grid" id="live-grid" style="padding:12px; gap:10px">
-        <!-- CAM 1 — Détection chute -->
-        <div class="cam-tile" id="cam-tile-1">
-          <div class="cam-header">
-            <div class="status-dot active"></div>
-            <span>CAM 1 — Zone Production</span>
+            <span>CAM 11 — Proximité Homme-Machine</span>
+            <span
+              style="
+                margin-left: auto;
+                font-family: var(--font-mono);
+                font-size: 10px;
+                color: var(--text-muted);
+              "
+              >YOLO Proximité</span
+            >
           </div>
           <div class="cam-feed">
             <video
-              id="cam1-video"
+              id="cam11-video"
               class="cam-video"
-              src="/media/worker_falling3.mp4"
+              src="/media/Media_Proximity/vid3.mp4"
               muted
               loop
               playsinline
-              preload="metadata"></video>
+              preload="auto"></video>
             <canvas
-              id="cam1-overlay-canvas"
+              id="cam11-overlay-canvas"
               class="cam-overlay-canvas"></canvas>
             <div class="cam-video-overlay">
               <div
@@ -98,11 +75,189 @@
                   width: 100%;
                 ">
                 <span style="font-size: 10px; font-family: var(--font-mono)"
-                  >worker_falling3.mp4</span
+                  >vid3.mp4</span
                 >
                 <span
                   style="font-size: 10px; font-family: var(--font-mono)"
-                  id="cam1-fall-status"
+                  id="cam11-proximity-status"
+                  >Détection: en attente…</span
+                >
+              </div>
+            </div>
+          </div>
+          <div
+            style="
+              padding: 8px 12px;
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+              border-top: 1px solid var(--bg-border);
+            ">
+            <span
+              style="
+                font-size: 9px;
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+              "
+              >MODULES:</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #E040FB;
+                --chip-rgb: 224, 64, 251;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >PROXIMITÉ</span
+            >
+          </div>
+        </div>
+      </div>
+      {% elif module_slug == 'posture' or module_slug == 'comportement' %}
+      <!-- ── CAM 9 (Posture, squelette) + CAM 10 (Panic, BiLSTM, sans squelette) ── -->
+      <div
+        class="live-grid"
+        id="live-grid"
+        style="padding: 12px; gap: 10px; grid-template-columns: 1fr 1fr">
+        <!-- CAM 9 — Posture Detection -->
+        <div class="cam-tile" id="cam-tile-9">
+          <div class="cam-header">
+            <div class="status-dot active"></div>
+            <span>CAM 9 — Posture & Ergonomie</span>
+            <span
+              style="
+                margin-left: auto;
+                font-family: var(--font-mono);
+                font-size: 10px;
+                color: var(--text-muted);
+              "
+              >YOLOv8-Pose · SAFE/UNSAFE</span
+            >
+          </div>
+          <div class="cam-feed">
+            <video
+              id="cam9-video"
+              class="cam-video"
+              src="/media/posture.mp4"
+              muted
+              loop
+              playsinline
+              preload="auto"></video>
+            <canvas
+              id="cam9-overlay-canvas"
+              class="cam-overlay-canvas"></canvas>
+            <div class="cam-video-overlay">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  gap: 10px;
+                  width: 100%;
+                ">
+                <span style="font-size: 10px; font-family: var(--font-mono)"
+                  >posture.mp4</span
+                >
+                <span
+                  style="font-size: 10px; font-family: var(--font-mono)"
+                  id="cam9-posture-status"
+                  >Détection: en attente…</span
+                >
+              </div>
+            </div>
+          </div>
+          <div
+            style="
+              padding: 8px 12px;
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+              border-top: 1px solid var(--bg-border);
+            ">
+            <span
+              style="
+                font-size: 9px;
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+              "
+              >MODULES:</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #ff6b00;
+                --chip-rgb: 255, 107, 0;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >POSTURE</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #4ae3b5;
+                --chip-rgb: 74, 227, 181;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >SAFE</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #ff3b2f;
+                --chip-rgb: 255, 59, 47;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >UNSAFE</span
+            >
+          </div>
+        </div>
+
+        <!-- CAM 10 — Panic Detection (pas de squelette — HUD BiLSTM) -->
+        <div class="cam-tile" id="cam-tile-10">
+          <div class="cam-header">
+            <div class="status-dot active"></div>
+            <span>CAM 10 — Détection Panique</span>
+            <span
+              style="
+                margin-left: auto;
+                font-family: var(--font-mono);
+                font-size: 10px;
+                color: var(--text-muted);
+              "
+              >BiLSTM · 30 frames</span
+            >
+          </div>
+          <div class="cam-feed">
+            <video
+              id="cam10-video"
+              class="cam-video"
+              src="/media/panic.mp4"
+              muted
+              loop
+              playsinline
+              preload="auto"></video>
+            <canvas
+              id="cam10-overlay-canvas"
+              class="cam-overlay-canvas"></canvas>
+            <div class="cam-video-overlay">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  gap: 10px;
+                  width: 100%;
+                ">
+                <span style="font-size: 10px; font-family: var(--font-mono)"
+                  >panic.mp4</span
+                >
+                <span
+                  style="font-size: 10px; font-family: var(--font-mono)"
+                  id="cam10-panic-status"
                   >Détection: en attente…</span
                 >
               </div>
@@ -132,30 +287,54 @@
                 font-size: 9px;
                 padding: 2px 6px;
               "
-              >CHUTE</span
+              >PANIC</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #00c2ff;
+                --chip-rgb: 0, 194, 255;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >LSTM</span
+            >
+            <span
+              class="toggle-chip on"
+              style="
+                --chip-color: #4ae3b5;
+                --chip-rgb: 74, 227, 181;
+                font-size: 9px;
+                padding: 2px 6px;
+              "
+              >CALME</span
             >
           </div>
         </div>
-
-        <!-- CAM 2 — Détection fatigue -->
-        <div class="cam-tile" id="cam-tile-2">
+      </div>
+      {% elif module_cameras %}
+      <div class="live-grid" id="live-grid" style="padding: 12px; gap: 10px">
+        {% for camera in module_cameras %}
+        <div class="cam-tile" id="cam-tile-{{ camera.id }}">
           <div class="cam-header">
             <div class="status-dot active"></div>
-            <span>CAM 2 — Zone Machines</span>
+            <span>{{ camera.name }}</span>
           </div>
           <div class="cam-feed">
             <video
-              id="cam2-video"
+              id="cam{{ camera.id }}-video"
               class="cam-video"
-              src="/media/worker_tired.mp4"
+              src="{{ camera.source }}"
               muted
               loop
               playsinline
-              preload="metadata"></video>
+              preload="auto"></video>
             <canvas
-              id="cam2-overlay-canvas"
+              id="cam{{ camera.id }}-overlay-canvas"
               class="cam-overlay-canvas"></canvas>
-            <div class="cam-video-overlay">
+            <div
+              class="cam-video-overlay"
+              id="cam{{ camera.id }}-video-overlay">
               <div
                 style="
                   display: flex;
@@ -165,12 +344,12 @@
                   width: 100%;
                 ">
                 <span style="font-size: 10px; font-family: var(--font-mono)"
-                  >worker_tired.mp4</span
+                  >Fichier: {{ camera.file_label }}</span
                 >
                 <span
                   style="font-size: 10px; font-family: var(--font-mono)"
-                  id="cam2-fatigue-status"
-                  >Détection: en attente…</span
+                  id="{{ camera.status_id }}"
+                  >Detection: en attente...</span
                 >
               </div>
             </div>
@@ -191,75 +370,27 @@
               "
               >MODULES:</span
             >
+            {% for chip in camera.chips %}
             <span
               class="toggle-chip on"
-              style="
-                --chip-color: #ffb800;
-                --chip-rgb: 255, 184, 0;
-                font-size: 9px;
-                padding: 2px 6px;
-              "
-              >FATIGUE</span
+              style="--chip-color:{{ chip.color }};--chip-rgb:{{ chip.rgb }}; font-size:9px; padding:2px 6px"
+              >{{ chip.label }}</span
             >
+            {% endfor %} {% if camera.secondary_status_id %}
+            <span
+              style="
+                font-size: 10px;
+                font-family: var(--font-mono);
+                margin-left: auto;
+              "
+              id="{{ camera.secondary_status_id }}"
+              >Detection: en attente...</span
+            >
+            {% endif %}
           </div>
         </div>
+        {% endfor %}
       </div>
-      {% elif module_slug == 'posture' or module_slug == 'comportement' %}
-      <!-- ── CAM 9 (Posture, squelette) + CAM 10 (Panic, BiLSTM, sans squelette) ── -->
-      <div class="live-grid" id="live-grid" style="padding:12px; gap:10px; grid-template-columns:1fr 1fr">
-
-        <!-- CAM 9 — Posture Detection -->
-        <div class="cam-tile" id="cam-tile-9">
-          <div class="cam-header">
-            <div class="status-dot active"></div>
-            <span>CAM 9 — Posture & Ergonomie</span>
-            <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)">YOLOv8-Pose · SAFE/UNSAFE</span>
-          </div>
-          <div class="cam-feed">
-            <video id="cam9-video" class="cam-video" src="/media/posture.mp4" muted loop playsinline preload="auto"></video>
-            <canvas id="cam9-overlay-canvas" class="cam-overlay-canvas"></canvas>
-            <div class="cam-video-overlay">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-                <span style="font-size:10px; font-family:var(--font-mono);">posture.mp4</span>
-                <span style="font-size:10px; font-family:var(--font-mono);" id="cam9-posture-status">Détection: en attente…</span>
-              </div>
-            </div>
-          </div>
-          <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
-            <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
-            <span class="toggle-chip on" style="--chip-color:#FF6B00;--chip-rgb:255,107,0; font-size:9px; padding:2px 6px">POSTURE</span>
-            <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">SAFE</span>
-            <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">UNSAFE</span>
-          </div>
-        </div>
-
-        <!-- CAM 10 — Panic Detection (pas de squelette — HUD BiLSTM) -->
-        <div class="cam-tile" id="cam-tile-10">
-          <div class="cam-header">
-            <div class="status-dot active"></div>
-            <span>CAM 10 — Détection Panique</span>
-            <span style="margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-muted)">BiLSTM · 30 frames</span>
-          </div>
-          <div class="cam-feed">
-            <video id="cam10-video" class="cam-video" src="/media/panic.mp4" muted loop playsinline preload="auto"></video>
-            <canvas id="cam10-overlay-canvas" class="cam-overlay-canvas"></canvas>
-            <div class="cam-video-overlay">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%">
-                <span style="font-size:10px; font-family:var(--font-mono);">panic.mp4</span>
-                <span style="font-size:10px; font-family:var(--font-mono);" id="cam10-panic-status">Détection: en attente…</span>
-              </div>
-            </div>
-          </div>
-          <div style="padding:8px 12px; display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--bg-border)">
-            <span style="font-size:9px; font-family:var(--font-mono); color:var(--text-muted)">MODULES:</span>
-            <span class="toggle-chip on" style="--chip-color:#FF3B2F;--chip-rgb:255,59,47; font-size:9px; padding:2px 6px">PANIC</span>
-            <span class="toggle-chip on" style="--chip-color:#00C2FF;--chip-rgb:0,194,255; font-size:9px; padding:2px 6px">LSTM</span>
-            <span class="toggle-chip on" style="--chip-color:#4AE3B5;--chip-rgb:74,227,181; font-size:9px; padding:2px 6px">CALME</span>
-          </div>
-        </div>
-
-      </div>
-
       {% else %}
       <div class="video-placeholder">
         <svg
@@ -440,8 +571,7 @@
 
 <div id="toast-container" class="toast-container"></div>
 
-{% endblock %}
-{% block extra_js %}
+{% endblock %} {% block extra_js %}
 <script>
   const MODULE_SLUG = "{{ module_slug }}";
   const MODULE_NAME = "{{ module.name }}";
@@ -530,6 +660,7 @@
         cam8: "CAM 8",
         cam9: "CAM 9",
         cam10: "CAM 10",
+        cam11: "CAM 11",
       }[cam] || "Caméra"
     );
   }

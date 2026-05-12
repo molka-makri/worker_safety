@@ -58,3 +58,6 @@ runs/
 db.sqlite3
 test_yolo.py
 test_sign_video.py
+venv_broken/
+*.pyc
+.env

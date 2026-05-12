@@ -14,12 +14,14 @@ IMPORTANT — classes de votre modèle :
 
 import cv2
 import numpy as np
+from app.hf_model_store import ensure_model_file
 import os
 from typing import Tuple, Dict, Any
 
 # ── Chemin vers le modèle ──────────────────────────────────────────────────────
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
-FALL_MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, '..', 'models', 'fall_detection.pt'))
+FALL_MODEL_PATH = ensure_model_file('fall_detection.pt')
+DEBUG_FALL_DETECTOR = os.getenv("DEBUG_FALL_DETECTOR", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 CONF_THRESHOLD = 0.45
 
@@ -120,8 +122,9 @@ class FallDetector:
                 label          = result.names.get(cls_id, str(cls_id))
 
                 # DEBUG — visible in Django logs / terminal
-                print(f"[FallDetector] DETECT cls={cls_id} label='{label}' conf={conf:.2f} "
-                      f"bbox=[{x1},{y1},{x2},{y2}]")
+                if DEBUG_FALL_DETECTOR:
+                    print(f"[FallDetector] DETECT cls={cls_id} label='{label}' conf={conf:.2f} "
+                          f"bbox=[{x1},{y1},{x2},{y2}]")
 
                 all_detections.append({
                     'class_id':   cls_id,
@@ -138,8 +141,9 @@ class FallDetector:
 
                 is_fall = by_label and conf >= CONF_THRESHOLD
 
-                print(f"[FallDetector]    → by_label={by_label}  by_shape={by_shape} "
-                      f"conf_ok={conf >= CONF_THRESHOLD}  → is_fall={is_fall}")
+                if DEBUG_FALL_DETECTOR:
+                    print(f"[FallDetector]    → by_label={by_label}  by_shape={by_shape} "
+                          f"conf_ok={conf >= CONF_THRESHOLD}  → is_fall={is_fall}")
 
                 if is_fall and conf > best_confidence:
                     best_confidence = conf

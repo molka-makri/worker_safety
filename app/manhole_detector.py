@@ -4,10 +4,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+from app.hf_model_store import ensure_model_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'models'))
-MANHOLE_MODEL_PATH = os.path.join(MODELS_DIR, 'manhole_seg.pt')
+MANHOLE_MODEL_PATH = ensure_model_file('manhole_seg.pt')
 
 CONF_THRESHOLD = 0.05
 MIN_AREA_RATIO = 0.002

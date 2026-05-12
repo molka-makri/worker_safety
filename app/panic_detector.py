@@ -14,10 +14,11 @@ from collections import deque
 
 import torch
 import torch.nn as nn
+from app.hf_model_store import ensure_model_file
 
 # ── Model paths ────────────────────────────────────────────────────────────────
-_POSE_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'yolov8n-pose.pt')
-_LSTM_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'panic.pt')
+_POSE_PATH = ensure_model_file('yolov8n-pose.pt')
+_LSTM_PATH = ensure_model_file('panic.pt')
 
 SEQ_LEN = 30
 N_FEATURES = 8
@@ -27,6 +28,8 @@ PANIC_WARNING_THRESHOLD = 0.18
 
 _pose_model = None
 _lstm_model = None
+_pose_model_failed = False
+_lstm_model_failed = False
 _frame_buffers: dict = {}   # {camera_id: deque(maxlen=SEQ_LEN)}
 
 
@@ -127,10 +130,13 @@ def _extract_features(kpts):
 # ── Model loaders ──────────────────────────────────────────────────────────────
 
 def _get_pose_model():
-    global _pose_model
+    global _pose_model, _pose_model_failed
+    if _pose_model_failed:
+        return None
     if _pose_model is None:
         if not os.path.exists(os.path.abspath(_POSE_PATH)):
             print(f"[PanicDetector] WARNING: pose model not found: {os.path.abspath(_POSE_PATH)}")
+            _pose_model_failed = True
             return None
         try:
             from ultralytics import YOLO
@@ -138,14 +144,18 @@ def _get_pose_model():
         except Exception as exc:
             print(f"[PanicDetector] WARNING: pose model unavailable: {exc}")
             _pose_model = None
+            _pose_model_failed = True
     return _pose_model
 
 
 def _get_lstm_model():
-    global _lstm_model
+    global _lstm_model, _lstm_model_failed
+    if _lstm_model_failed:
+        return None
     if _lstm_model is None:
         if not os.path.exists(os.path.abspath(_LSTM_PATH)):
             print(f"[PanicDetector] WARNING: LSTM model not found: {os.path.abspath(_LSTM_PATH)}")
+            _lstm_model_failed = True
             return None
         try:
             model = PanicLSTM()
@@ -156,7 +166,60 @@ def _get_lstm_model():
         except Exception as exc:
             print(f"[PanicDetector] WARNING: LSTM model unavailable: {exc}")
             _lstm_model = None
+            _lstm_model_failed = True
     return _lstm_model
+
+
+def _extract_pose_persons(frame):
+    pose = _get_pose_model()
+    persons = []
+
+    if pose is not None:
+        try:
+            results = pose(frame, verbose=False, conf=CONF_THRESH)
+            if results and results[0].keypoints is not None:
+                for index in range(len(results[0].keypoints)):
+                    kp = results[0].keypoints[index]
+                    kpts_xy = kp.xy.cpu().numpy()
+                    if kpts_xy.ndim == 3:
+                        kpts_xy = kpts_xy[0]
+                    if kpts_xy.shape[0] < 17:
+                        continue
+                    persons.append({"kps_xy": kpts_xy, "source": "yolo_pose"})
+        except Exception as exc:
+            print(f"[PanicDetector] WARNING: pose inference unavailable: {exc}")
+
+    if persons:
+        return persons, "yolo_pose"
+
+    try:
+        from .posture_detector import _load_mediapipe, _mediapipe_persons
+
+        _load_mediapipe()
+        fallback_persons = _mediapipe_persons(frame)
+        if fallback_persons:
+            return fallback_persons, "mediapipe"
+    except Exception as exc:
+        print(f"[PanicDetector] WARNING: MediaPipe fallback unavailable: {exc}")
+
+    return [], "none"
+
+
+def _heuristic_panic_score(sequence: np.ndarray) -> float:
+    if sequence.size == 0:
+        return 0.0
+    recent = sequence[-min(len(sequence), 12):]
+    variability = float(np.clip(np.std(recent, axis=0).mean() / 35.0, 0.0, 1.0))
+    arm_elevation = float(np.clip(np.mean(recent[:, 4]) / 120.0, 0.0, 1.0))
+    stride_change = float(np.clip(np.mean(recent[:, 1]) / 90.0, 0.0, 1.0))
+    lateral_lean = float(np.clip(np.mean(recent[:, 5]) / 45.0, 0.0, 1.0))
+    score = (
+        0.35 * variability
+        + 0.25 * arm_elevation
+        + 0.20 * stride_change
+        + 0.20 * lateral_lean
+    )
+    return float(np.clip(score, 0.0, 1.0))
 
 
 # ── Main detection function ────────────────────────────────────────────────────
@@ -170,31 +233,18 @@ def detect_panic_in_frame(frame, camera='cam10'):
     buf = _frame_buffers[camera]
 
     try:
-        pose = _get_pose_model()
+        pose_persons, pose_backend = _extract_pose_persons(frame)
         lstm = _get_lstm_model()
-
-        if pose is None or lstm is None:
-            return False, 0.0, {
-                'error': 'Models unavailable (pose or LSTM)',
-                'missing_model': os.path.abspath(_LSTM_PATH) if not os.path.exists(os.path.abspath(_LSTM_PATH)) else None,
-                'model_available': False,
-                'camera': camera,
-                'buffer_size': len(buf),
-            }
-
-        results = pose(frame, verbose=False, conf=CONF_THRESH)
 
         features = None
         persons_detected = 0
 
-        if results and results[0].keypoints is not None and len(results[0].keypoints) > 0:
-            kp = results[0].keypoints[0]
-            kpts_xy = kp.xy.cpu().numpy()
-            if kpts_xy.ndim == 3:
-                kpts_xy = kpts_xy[0]
+        if pose_persons:
+            first_person = pose_persons[0]
+            kpts_xy = np.array(first_person["kps_xy"], dtype=float)
             if kpts_xy.shape[0] >= 17:
                 features = _extract_features(kpts_xy)
-                persons_detected = len(results[0].keypoints)
+                persons_detected = len(pose_persons)
 
         if features is None:
             features = np.zeros(N_FEATURES, dtype=np.float32)
@@ -210,10 +260,16 @@ def detect_panic_in_frame(frame, camera='cam10'):
         seq = np.stack(buf_list, axis=0)        # (30, 8)
         x = torch.tensor(seq, dtype=torch.float32).unsqueeze(0)  # (1, 30, 8)
 
-        with torch.no_grad():
-            logits = lstm(x)
-            probs = torch.softmax(logits, dim=1)[0]
-            p_panic = float(probs[1].item())
+        using_heuristic = lstm is None
+        if using_heuristic:
+            p_panic = _heuristic_panic_score(seq)
+            p_normal = 1.0 - p_panic
+        else:
+            with torch.no_grad():
+                logits = lstm(x)
+                probs = torch.softmax(logits, dim=1)[0]
+                p_panic = float(probs[1].item())
+                p_normal = float(probs[0].item())
 
         panic_detected = p_panic >= PANIC_THRESHOLD
         possible_panic = not panic_detected and p_panic >= PANIC_WARNING_THRESHOLD
@@ -224,14 +280,16 @@ def detect_panic_in_frame(frame, camera='cam10'):
             'possible_panic'  : possible_panic,
             'label'           : 'PANIC' if panic_detected else ('POSSIBLE' if possible_panic else 'NORMAL'),
             'confidence'      : float(p_panic),
-            'p_normal'        : float(probs[0].item()),
+            'p_normal'        : p_normal,
             'p_panic'         : p_panic,
             'frames_collected': frames_collected,
             'frames_needed'   : SEQ_LEN,
             'warming_up'      : warming_up,
             'persons_detected': persons_detected,
             'camera'          : camera,
-            'model_available' : True,
+            'pose_backend'    : pose_backend,
+            'classifier_backend': 'heuristic_fallback' if using_heuristic else 'bilstm',
+            'model_available' : bool(pose_persons),
         }
 
     except Exception as e:

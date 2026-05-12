@@ -1,4 +1,5 @@
 from django.urls import path
+from .views import api_register
 from .views import (
     IndexView,
     SafetyDashboardView,
@@ -10,9 +11,11 @@ from .views import (
     UserLoginView,
     UserLogoutView,
     SignUpView,
+    api_daily_report,
     api_test,
     api_module_events,
     api_clear_alerts,
+    api_preload_models,
     api_fall_detection,
     api_fall_detection_batch,
     api_fatigue_detection,
@@ -23,12 +26,14 @@ from .views import (
     api_manhole_detection,
     api_manhole_depth,
     api_blocked_exit_detection,
+    api_fire_detection,
     api_proximity_detection,
     api_proximity_detection_batch,
     api_posture_detection,   # CAM 9 — posture
     api_panic_detection,     # CAM 10 — panic
     api_worker_tracking_detection,
     api_chat,
+    hf_media_proxy,
 
 )
 
@@ -53,6 +58,7 @@ urlpatterns = [
     path('api/test/',           api_test,                       name='api_test'),
     path('api/module-events/<slug:slug>/', api_module_events,   name='api_module_events'),
     path('api/alerts/clear/',   api_clear_alerts,               name='api_clear_alerts'),
+    path('api/preload-models/', api_preload_models,             name='api_preload_models'),
 
     # ── API — Détection de chute ───────────────────────────
     path('api/fall-detection/',        api_fall_detection,        name='api_fall_detection'),
@@ -69,6 +75,7 @@ urlpatterns = [
     path('api/manhole-detection/', api_manhole_detection, name='api_manhole_detection'),
     path('api/manhole-depth/', api_manhole_depth, name='api_manhole_depth'),
     path('api/blocked-exit-detection/', api_blocked_exit_detection, name='api_blocked_exit_detection'),
+    path('api/fire-detection/', api_fire_detection, name='api_fire_detection'),
 
     # ── API — Détection de Proximité ───────────────────────
     path('api/proximity-detection/', api_proximity_detection, name='api_proximity_detection'),
@@ -80,5 +87,8 @@ urlpatterns = [
     
     # ── API — Tracking travailleurs (CAM 8) ───────────────
     path('api/worker-tracking-detection/', api_worker_tracking_detection, name='api_worker_tracking_detection'),
-     path('api/chat/', api_chat, name='api_chat'),
+    path('api/chat/', api_chat, name='api_chat'),
+    path('hf-media/<path:asset_path>/', hf_media_proxy, name='hf_media_proxy'),
+    path('api/daily-report/', api_daily_report, name='api_daily_report'),
+     path('api/register/', api_register, name='api_register'),
 ]

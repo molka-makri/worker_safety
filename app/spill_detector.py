@@ -3,9 +3,10 @@ from typing import Any, Dict, List, Tuple
 
 import cv2
 import numpy as np
+from app.hf_model_store import ensure_model_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SPILL_MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, '..', 'models', 'spill_detection_model.pt'))
+SPILL_MODEL_PATH = ensure_model_file('spill_detection_model.pt')
 
 CONF_THRESHOLD = 0.20
 MIN_SPILL_AREA_RATIO = 0.0002
